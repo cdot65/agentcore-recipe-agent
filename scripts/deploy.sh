@@ -53,17 +53,20 @@ if ! aws iam get-role --role-name "${ROLE_NAME}" &>/dev/null; then
   aws iam put-role-policy \
     --role-name "${ROLE_NAME}" \
     --policy-name BedrockInvokeModel \
-    --policy-document '{
-      "Version": "2012-10-17",
-      "Statement": [{
-        "Effect": "Allow",
-        "Action": [
-          "bedrock:InvokeModel",
-          "bedrock:InvokeModelWithResponseStream"
+    --policy-document "{
+      \"Version\": \"2012-10-17\",
+      \"Statement\": [{
+        \"Effect\": \"Allow\",
+        \"Action\": [
+          \"bedrock:InvokeModel\",
+          \"bedrock:InvokeModelWithResponseStream\"
         ],
-        "Resource": "arn:aws:bedrock:*::foundation-model/*"
+        \"Resource\": [
+          \"arn:aws:bedrock:*::foundation-model/*\",
+          \"arn:aws:bedrock:*:${ACCOUNT_ID}:inference-profile/*\"
+        ]
       }]
-    }'
+    }"
 
   aws iam put-role-policy \
     --role-name "${ROLE_NAME}" \
