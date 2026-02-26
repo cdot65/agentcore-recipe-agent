@@ -19,7 +19,7 @@ export const fetchUrlTool = tool({
   description:
     "Fetches a URL and returns the page text content plus any schema.org/Recipe JSON-LD data found. Use this to retrieve recipe webpages.",
   inputSchema: z.object({
-    url: z.string().url().describe("The URL to fetch"),
+    url: z.url().describe("The URL to fetch"),
   }),
   callback: async (input) => {
     const response = await fetch(input.url, {
@@ -33,7 +33,10 @@ export const fetchUrlTool = tool({
     });
 
     if (!response.ok) {
-      return { text: `Error: HTTP ${response.status} ${response.statusText}`, jsonLd: null };
+      return {
+        text: `Error: HTTP ${response.status} ${response.statusText}`,
+        jsonLd: null,
+      };
     }
 
     const html = await response.text();
