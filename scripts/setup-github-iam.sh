@@ -95,8 +95,8 @@ aws iam put-role-policy \
     \"Statement\": [{
       \"Effect\": \"Allow\",
       \"Action\": [
-        \"bedrock-agentcore-control:UpdateAgentRuntime\",
-        \"bedrock-agentcore-control:GetAgentRuntime\"
+        \"bedrock-agentcore:UpdateAgentRuntime\",
+        \"bedrock-agentcore:GetAgentRuntime\"
       ],
       \"Resource\": \"arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${RUNTIME_ID}\"
     }]
