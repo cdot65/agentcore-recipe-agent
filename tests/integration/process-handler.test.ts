@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockInvoke } = vi.hoisted(() => ({
+const { mockInvoke, mockScanPrompt, mockScanResponse, mockIsEnabled } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
+  mockScanPrompt: vi.fn(),
+  mockScanResponse: vi.fn(),
+  mockIsEnabled: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("@strands-agents/sdk", () => ({
@@ -16,6 +19,14 @@ vi.mock("bedrock-agentcore/runtime", () => ({
   BedrockAgentCoreApp: class {
     run = vi.fn();
     constructor(public config: unknown) {}
+  },
+}));
+
+vi.mock("../../src/lib/airs-api-client.js", () => ({
+  PrismaAIRSClient: class {
+    isEnabled = mockIsEnabled;
+    scanPrompt = mockScanPrompt;
+    scanResponse = mockScanResponse;
   },
 }));
 
@@ -47,6 +58,9 @@ function mockAgentResult(text: string) {
 describe("processHandler", () => {
   beforeEach(() => {
     mockInvoke.mockReset();
+    mockScanPrompt.mockReset();
+    mockScanResponse.mockReset();
+    mockIsEnabled.mockReturnValue(false);
   });
 
   it("returns validated recipe from direct JSON response", async () => {
@@ -131,5 +145,65 @@ describe("processHandler", () => {
     const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
 
     expect(result).toEqual(fullRecipe);
+  });
+
+  describe("AIRS integration", () => {
+    beforeEach(() => {
+      mockIsEnabled.mockReturnValue(true);
+      mockScanPrompt.mockResolvedValue({ action: "allow", scan_id: "s1" });
+      mockScanResponse.mockResolvedValue({ action: "allow", scan_id: "s2" });
+      mockInvoke.mockResolvedValue(mockAgentResult(JSON.stringify(validRecipe)));
+    });
+
+    it("calls scanPrompt and scanResponse when enabled", async () => {
+      await processHandler({ url: "https://example.com/recipe" }, mockContext());
+
+      expect(mockScanPrompt).toHaveBeenCalledOnce();
+      expect(mockScanResponse).toHaveBeenCalledOnce();
+    });
+
+    it("returns blocked response when prompt scan blocks", async () => {
+      mockScanPrompt.mockResolvedValueOnce({
+        action: "block",
+        category: "injection",
+        scan_id: "s-blocked",
+      });
+
+      const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
+
+      expect(result).toEqual({
+        error: "blocked",
+        message: "Request blocked by Prisma AIRS security.",
+        category: "injection",
+        scan_id: "s-blocked",
+      });
+      expect(mockInvoke).not.toHaveBeenCalled();
+    });
+
+    it("returns blocked response when response scan blocks", async () => {
+      mockScanResponse.mockResolvedValueOnce({
+        action: "block",
+        category: "dlp",
+        scan_id: "s-resp-blocked",
+      });
+
+      const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
+
+      expect(result).toEqual({
+        error: "blocked",
+        message: "Response blocked by Prisma AIRS security.",
+        category: "dlp",
+        scan_id: "s-resp-blocked",
+      });
+    });
+
+    it("skips AIRS scans when disabled", async () => {
+      mockIsEnabled.mockReturnValue(false);
+
+      await processHandler({ url: "https://example.com/recipe" }, mockContext());
+
+      expect(mockScanPrompt).not.toHaveBeenCalled();
+      expect(mockScanResponse).not.toHaveBeenCalled();
+    });
   });
 });
