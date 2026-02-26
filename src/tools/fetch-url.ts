@@ -19,21 +19,25 @@ export const fetchUrlTool = tool({
   description:
     "Fetches a URL and returns the page text content plus any schema.org/Recipe JSON-LD data found. Use this to retrieve recipe webpages.",
   inputSchema: z.object({
-    url: z.string().url().describe("The URL to fetch"),
+    url: z.url().describe("The URL to fetch"),
   }),
   callback: async (input) => {
     const response = await fetch(input.url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
       redirect: "follow",
     });
 
     if (!response.ok) {
-      return { text: `Error: HTTP ${response.status} ${response.statusText}`, jsonLd: null };
+      return {
+        text: `Error: HTTP ${response.status} ${response.statusText}`,
+        jsonLd: null,
+      };
     }
 
     const html = await response.text();
@@ -41,7 +45,9 @@ export const fetchUrlTool = tool({
 
     // Extract JSON-LD recipe data before stripping scripts
     let jsonLd: unknown = null;
-    const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    const ldScripts = document.querySelectorAll(
+      'script[type="application/ld+json"]',
+    );
     for (const script of ldScripts) {
       try {
         const data = JSON.parse(script.textContent || "");
@@ -61,7 +67,9 @@ export const fetchUrlTool = tool({
         }
         // Handle array of objects at top level
         if (Array.isArray(data)) {
-          const recipe = data.find((item: Record<string, unknown>) => item?.["@type"] === "Recipe");
+          const recipe = data.find(
+            (item: Record<string, unknown>) => item?.["@type"] === "Recipe",
+          );
           if (recipe) {
             jsonLd = recipe;
             break;
