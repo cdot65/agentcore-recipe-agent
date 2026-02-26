@@ -2,6 +2,7 @@ import { Agent, type AgentResult, BedrockModel } from "@strands-agents/sdk";
 import { BedrockAgentCoreApp } from "bedrock-agentcore/runtime";
 import { z } from "zod";
 import { PrismaAIRSClient } from "./lib/airs-api-client.js";
+import { createCloudWatchStream, createTeeStream } from "./lib/cloudwatch-stream.js";
 import { RecipeSchema } from "./schemas/recipe.js";
 import { fetchUrlTool } from "./tools/fetch-url.js";
 
@@ -142,7 +143,17 @@ export const processHandler = async (
   return recipe;
 };
 
+const LOG_GROUP = "/aws/bedrock/agentcore/recipe-extraction-agent";
+const region = process.env.AWS_REGION || "us-west-2";
+
+/* v8 ignore start -- module-level env branch; tested via deploy */
+const logStream = process.env.BEDROCK_AGENT_ID
+  ? createTeeStream(process.stdout, createCloudWatchStream(LOG_GROUP, region))
+  : process.stdout;
+/* v8 ignore stop */
+
 export const app = new BedrockAgentCoreApp({
+  config: { logging: { options: { stream: logStream } } },
   invocationHandler: {
     requestSchema: z.object({
       url: z.string().url().describe("URL of the recipe page to extract"),

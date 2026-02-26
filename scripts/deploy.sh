@@ -80,11 +80,23 @@ if ! aws iam get-role --role-name "${ROLE_NAME}" &>/dev/null; then
       }]
     }"
 
+  aws iam put-role-policy \
+    --role-name "${ROLE_NAME}" \
+    --policy-name CloudWatchLogs \
+    --policy-document "{
+      \"Version\": \"2012-10-17\",
+      \"Statement\": [{
+        \"Effect\": \"Allow\",
+        \"Action\": [\"logs:CreateLogGroup\", \"logs:CreateLogStream\", \"logs:PutLogEvents\"],
+        \"Resource\": \"arn:aws:logs:${REGION}:${ACCOUNT_ID}:log-group:/aws/bedrock/agentcore/recipe-extraction-agent:*\"
+      }]
+    }"
+
   echo "    Created role and attached policies. Waiting for propagation..."
   sleep 10
 else
   echo "    Role already exists."
-  # Ensure SecretsManager policy is attached (idempotent)
+  # Ensure policies are attached (idempotent)
   aws iam put-role-policy \
     --role-name "${ROLE_NAME}" \
     --policy-name SecretsManagerRead \
@@ -94,6 +106,17 @@ else
         \"Effect\": \"Allow\",
         \"Action\": [\"secretsmanager:GetSecretValue\"],
         \"Resource\": \"arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:recipe-agent/*\"
+      }]
+    }"
+  aws iam put-role-policy \
+    --role-name "${ROLE_NAME}" \
+    --policy-name CloudWatchLogs \
+    --policy-document "{
+      \"Version\": \"2012-10-17\",
+      \"Statement\": [{
+        \"Effect\": \"Allow\",
+        \"Action\": [\"logs:CreateLogGroup\", \"logs:CreateLogStream\", \"logs:PutLogEvents\"],
+        \"Resource\": \"arn:aws:logs:${REGION}:${ACCOUNT_ID}:log-group:/aws/bedrock/agentcore/recipe-extraction-agent:*\"
       }]
     }"
 fi

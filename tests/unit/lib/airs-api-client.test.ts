@@ -105,18 +105,31 @@ describe("PrismaAIRSClient", () => {
       expect(body.metadata.app_user).toBe("user1");
     });
 
-    it("returns null on HTTP error", async () => {
+    it("returns null on HTTP error and logs via logger", async () => {
       fetchSpy.mockResolvedValueOnce(jsonResponse({ error: "bad" }, 400));
-      const client = new PrismaAIRSClient({ apiKey: "k", profileName: "P" });
+      const logger = { error: vi.fn() };
+      const client = new PrismaAIRSClient({ apiKey: "k", profileName: "P", logger });
       const result = await client.scanPrompt("test");
       expect(result).toBeNull();
+      expect(logger.error).toHaveBeenCalledWith("AIRS API error: 400 Bad Request");
     });
 
-    it("returns null on network error", async () => {
+    it("returns null on network error and logs via logger", async () => {
       fetchSpy.mockRejectedValueOnce(new Error("network fail"));
-      const client = new PrismaAIRSClient({ apiKey: "k", profileName: "P" });
+      const logger = { error: vi.fn() };
+      const client = new PrismaAIRSClient({ apiKey: "k", profileName: "P", logger });
       const result = await client.scanPrompt("test");
       expect(result).toBeNull();
+      expect(logger.error).toHaveBeenCalledWith("AIRS API request failed:", expect.any(Error));
+    });
+
+    it("defaults logger to console", async () => {
+      fetchSpy.mockResolvedValueOnce(jsonResponse({ error: "bad" }, 400));
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const client = new PrismaAIRSClient({ apiKey: "k", profileName: "P" });
+      await client.scanPrompt("test");
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
     });
   });
 
