@@ -50,15 +50,21 @@ export interface AIRSScanResponse {
   tr_id: string;
 }
 
+export interface Logger {
+  error(...args: unknown[]): void;
+}
+
 export class PrismaAIRSClient {
   private readonly apiUrl: string;
   private readonly apiKey: string;
   private readonly profileName: string;
+  private readonly logger: Logger;
 
   constructor(config?: {
     apiUrl?: string;
     apiKey?: string;
     profileName?: string;
+    logger?: Logger;
   }) {
     this.apiUrl =
       config?.apiUrl ||
@@ -66,6 +72,7 @@ export class PrismaAIRSClient {
       "https://service.api.aisecurity.paloaltonetworks.com/v1/scan/sync/request";
     this.apiKey = config?.apiKey || process.env.PRISMA_AIRS_API_KEY || "";
     this.profileName = config?.profileName || process.env.PRISMA_AIRS_PROFILE_NAME || "";
+    this.logger = config?.logger || console;
   }
 
   async scanPrompt(
@@ -146,13 +153,13 @@ export class PrismaAIRSClient {
       });
 
       if (!response.ok) {
-        console.error(`AIRS API error: ${response.status} ${response.statusText}`);
+        this.logger.error(`AIRS API error: ${response.status} ${response.statusText}`);
         return null;
       }
 
       return (await response.json()) as AIRSScanResponse;
     } catch (error) {
-      console.error("AIRS API request failed:", error);
+      this.logger.error("AIRS API request failed:", error);
       return null;
     }
   }
