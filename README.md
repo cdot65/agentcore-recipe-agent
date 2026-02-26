@@ -7,29 +7,37 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for system design and request flow diagra
 ## Prerequisites
 
 - Node.js 20+
-- AWS credentials configured with Bedrock access (`us.anthropic.claude-haiku-4-5-20251001-v1:0` in `us-east-1`)
+- AWS credentials configured with Bedrock access (`us.anthropic.claude-haiku-4-5-20251001-v1:0` in `us-west-2`)
 
 ## Setup
 
 ```bash
-pnpm install
+npm install
 ```
 
 ## Scripts
 
 | Script | Description |
 |---|---|
-| `pnpm run dev` | Start dev server with tsx (hot reload) |
-| `pnpm run build` | Compile TypeScript to `dist/` |
-| `pnpm start` | Run compiled output |
-| `pnpm run test:local` | Start server, hit /ping, POST a recipe URL, print result |
+| `npm run dev` | Start dev server with tsx (hot reload) |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm start` | Run compiled output |
+| `npm test` | Run test suite (71 tests, Vitest) |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run test:coverage` | Run tests with coverage (100% enforced) |
+| `npm run typecheck` | Type-check without emitting (`tsc --noEmit`) |
+| `npm run lint` | Lint with Biome |
+| `npm run format` | Check formatting with Biome |
+| `npm run check` | Lint + format combined |
+| `npm run check:fix` | Auto-fix lint + format issues |
+| `npm run test:local` | Start server, hit /ping, POST a recipe URL, print result |
 
 ## Usage
 
 Start the server:
 
 ```bash
-pnpm run dev
+npm run dev
 ```
 
 Health check:
@@ -78,11 +86,26 @@ curl -X POST http://localhost:8080/invocations \
 
 ```
 src/
-  agent.ts                 Entry point: Agent + BedrockAgentCoreApp
+  app.ts                 Agent logic, extractJson, processHandler (exports)
+  main.ts                Entry point (imports app, calls app.run())
   schemas/
-    recipe.ts              Zod schemas for Recipe and Ingredient
+    recipe.ts            Zod schemas for Recipe and Ingredient
   tools/
-    fetch-url.ts           Custom tool: fetch URL, strip HTML, extract JSON-LD
+    fetch-url.ts         Custom tool: fetch URL, strip HTML, extract JSON-LD
+tests/
+  unit/
+    schemas/
+      recipe.test.ts     Schema validation tests
+    tools/
+      fetch-url.test.ts  URL fetch + HTML parsing tests
+    extract-json.test.ts JSON extraction tier tests
+  integration/
+    process-handler.test.ts  End-to-end handler tests
+.githooks/
+  pre-commit             Runs typecheck → lint → test before each commit
+.github/
+  workflows/
+    ci.yml               GitHub Actions CI (typecheck, lint, test on PR/push to main)
 ```
 
 ## Key Dependencies
@@ -93,3 +116,13 @@ src/
 | `@strands-agents/sdk` | Agent framework (Agent, BedrockModel, tool) |
 | `zod` v4 | Request/response schema validation |
 | `linkedom` | Lightweight HTML parsing (~200KB vs jsdom's 70MB) |
+
+## Dev Dependencies
+
+| Package | Purpose |
+|---|---|
+| `vitest` | Test framework (71 tests, 100% coverage) |
+| `@vitest/coverage-v8` | V8-based code coverage |
+| `@biomejs/biome` | Linting + formatting |
+| `typescript` | Type checking |
+| `tsx` | TypeScript execution for dev server |
