@@ -11,6 +11,11 @@ graph TB
         Invoke["POST /invocations"]
     end
 
+    subgraph Security["Prisma AIRS AI Runtime Security"]
+        PromptScan["Prompt Scan<br/>(pre-LLM)"]
+        ResponseScan["Response Scan<br/>(post-LLM)"]
+    end
+
     subgraph StrandsAgent["Strands Agent"]
         Model["BedrockModel<br/>Claude Haiku 4.5"]
         SystemPrompt["System Prompt<br/>(extraction rules)"]
@@ -31,10 +36,14 @@ graph TB
 
     ExternalSite[(Recipe Website)]
     Bedrock[(Amazon Bedrock<br/>us-west-2)]
+    AIRS[(Prisma AIRS API<br/>aisecurity.paloaltonetworks.com)]
 
     Client -->|"POST {url}"| Invoke
     Client -->|health check| Ping
-    Invoke --> StrandsAgent
+    Invoke --> PromptScan
+    PromptScan <-->|scan prompt| AIRS
+    PromptScan -->|allow| StrandsAgent
+    PromptScan -.->|block| Client
     Model <-->|Converse API| Bedrock
     Model -->|tool_use| FetchTool
     FetchTool --> HTTPFetch
@@ -46,9 +55,13 @@ graph TB
     JSONLD -->|"text + jsonLd"| Model
     Model -->|JSON text| ExtractJSON
     ExtractJSON --> ZodValidation
-    ZodValidation -->|"typed Recipe"| Client
+    ZodValidation --> ResponseScan
+    ResponseScan <-->|scan response| AIRS
+    ResponseScan -->|allow| Client
+    ResponseScan -.->|block| Client
 
     style AgentCore fill:#1a1a2e,stroke:#e94560,color:#fff
+    style Security fill:#2d1b36,stroke:#e94560,color:#fff
     style StrandsAgent fill:#16213e,stroke:#0f3460,color:#fff
     style Processing fill:#0f3460,stroke:#533483,color:#fff
     style FetchToolInternals fill:#1a1a2e,stroke:#533483,color:#fff
@@ -60,6 +73,7 @@ graph TB
 sequenceDiagram
     participant C as Client
     participant App as BedrockAgentCoreApp
+    participant AIRS as Prisma AIRS API
     participant A as Strands Agent
     participant B as Amazon Bedrock
     participant T as fetch_url Tool
@@ -68,37 +82,60 @@ sequenceDiagram
     C->>+App: POST /invocations<br/>{"url": "https://..."}
     Note over App: Validate request via Zod<br/>Extract sessionId from header
 
-    App->>+A: agent.invoke("Extract recipe from URL")
+    rect rgb(45, 27, 54)
+        Note over App,AIRS: Pre-LLM Security Scan
+        App->>+AIRS: scanPrompt(prompt, sessionId)
+        AIRS-->>-App: {action: "allow" | "block"}
+    end
 
-    A->>+B: Converse API<br/>(system prompt + user message)
-    B-->>-A: tool_use: fetch_url({url})
+    alt AIRS blocks prompt
+        App-->>C: 200 {error: "blocked", category, scan_id}
+    else AIRS allows prompt
+        App->>+A: agent.invoke("Extract recipe from URL")
 
-    A->>+T: fetch_url({url})
-    T->>+W: GET https://...
-    W-->>-T: HTML response
+        A->>+B: Converse API<br/>(system prompt + user message)
+        B-->>-A: tool_use: fetch_url({url})
 
-    Note over T: Parse HTML with linkedom
-    Note over T: Extract JSON-LD (schema.org/Recipe)
-    Note over T: Strip script, style, nav, header, footer
-    Note over T: Collapse whitespace, truncate at 30k chars
+        A->>+T: fetch_url({url})
+        T->>+W: GET https://...
+        W-->>-T: HTML response
 
-    T-->>-A: {text, jsonLd}
+        Note over T: Parse HTML with linkedom
+        Note over T: Extract JSON-LD (schema.org/Recipe)
+        Note over T: Strip script, style, nav, header, footer
+        Note over T: Collapse whitespace, truncate at 30k chars
 
-    A->>+B: Converse API<br/>(tool result with text + jsonLd)
-    B-->>-A: Recipe JSON as text response
+        T-->>-A: {text, jsonLd}
 
-    A-->>-App: AgentResult
+        A->>+B: Converse API<br/>(tool result with text + jsonLd)
+        B-->>-A: Recipe JSON as text response
 
-    Note over App: extractJson() — parse raw text,<br/>code block, or brace extraction
-    Note over App: RecipeSchema.parse() — Zod validation
+        A-->>-App: AgentResult
 
-    App-->>-C: 200 OK<br/>typed Recipe JSON
+        Note over App: extractJson() — parse raw text,<br/>code block, or brace extraction
+        Note over App: RecipeSchema.parse() — Zod validation
+
+        rect rgb(45, 27, 54)
+            Note over App,AIRS: Post-LLM Security Scan
+            App->>+AIRS: scanResponse(recipeJSON, prompt, sessionId)
+            AIRS-->>-App: {action: "allow" | "block"}
+        end
+
+        alt AIRS blocks response
+            App-->>C: 200 {error: "blocked", category, scan_id}
+        else AIRS allows response
+            App-->>-C: 200 OK<br/>typed Recipe JSON
+        end
+    end
 ```
 
 ## Key Design Decisions
 
 | Decision | Rationale |
 |---|---|
+| **Prisma AIRS pre+post scan** | Scans inbound prompt for injection/malicious URLs and outbound response for DLP/toxic content |
+| **Fail-open on AIRS misconfiguration** | If API key missing, agent operates normally — no hard dependency on security service |
+| **Agent metadata in AIRS requests** | Populates `agent_meta` (agent_id, version, ARN) for AWS agent discovery in Strata Cloud Manager |
 | **Non-streaming handler** | Returns single JSON object — structured data doesn't benefit from SSE streaming |
 | **`agent.invoke()` + JSON parse** | `structuredOutputSchema` is typed in the SDK but docs say "not supported in TypeScript" — manual parse is reliable |
 | **`extractJson()` fallback chain** | LLM may wrap JSON in markdown code blocks; tries direct parse → code block regex → brace extraction |
