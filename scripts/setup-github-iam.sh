@@ -92,14 +92,26 @@ aws iam put-role-policy \
   --policy-name agentcore-deploy \
   --policy-document "{
     \"Version\": \"2012-10-17\",
-    \"Statement\": [{
-      \"Effect\": \"Allow\",
-      \"Action\": [
-        \"bedrock-agentcore:UpdateAgentRuntime\",
-        \"bedrock-agentcore:GetAgentRuntime\"
-      ],
-      \"Resource\": \"arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${RUNTIME_ID}\"
-    }]
+    \"Statement\": [
+      {
+        \"Effect\": \"Allow\",
+        \"Action\": [
+          \"bedrock-agentcore:UpdateAgentRuntime\",
+          \"bedrock-agentcore:GetAgentRuntime\"
+        ],
+        \"Resource\": \"arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${RUNTIME_ID}\"
+      },
+      {
+        \"Effect\": \"Allow\",
+        \"Action\": \"iam:PassRole\",
+        \"Resource\": \"arn:aws:iam::${ACCOUNT_ID}:role/BedrockAgentCoreRecipeAgent\",
+        \"Condition\": {
+          \"StringEquals\": {
+            \"iam:PassedToService\": \"bedrock-agentcore.amazonaws.com\"
+          }
+        }
+      }
+    ]
   }"
 
 ROLE_ARN=$(aws iam get-role --role-name "${ROLE_NAME}" --query 'Role.Arn' --output text)
