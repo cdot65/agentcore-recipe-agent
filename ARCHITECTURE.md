@@ -30,7 +30,7 @@ graph TB
     end
 
     ExternalSite[(Recipe Website)]
-    Bedrock[(Amazon Bedrock<br/>us-east-1)]
+    Bedrock[(Amazon Bedrock<br/>us-west-2)]
 
     Client -->|"POST {url}"| Invoke
     Client -->|health check| Ping
