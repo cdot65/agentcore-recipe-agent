@@ -82,12 +82,47 @@ curl -X POST http://localhost:8080/invocations \
 }
 ```
 
+## Prisma AIRS AI Runtime Security
+
+The agent integrates [Prisma AIRS](https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-airs) for AI-layer threat detection. Every request passes through two security checkpoints:
+
+1. **Pre-scan** — inbound prompt scanned for injection, malicious URLs, toxic content
+2. **Post-scan** — outbound recipe JSON scanned for DLP violations, malicious content
+
+Configure via `.env` (see `.env.example`):
+
+```bash
+PRISMA_AIRS_API_KEY=your-api-key
+PRISMA_AIRS_PROFILE_NAME=your-profile-name
+
+# Optional: agent metadata for AIRS agent discovery
+BEDROCK_AGENT_ID=
+BEDROCK_AGENT_VERSION=1
+AWS_ACCOUNT_ID=
+AWS_REGION=us-west-2
+```
+
+If AIRS is not configured, the agent operates normally (fail-open).
+
+When a scan blocks a request, the response includes:
+
+```json
+{
+  "error": "blocked",
+  "message": "Request blocked by Prisma AIRS security.",
+  "category": "Prompt-Injection",
+  "scan_id": "scan-abc123"
+}
+```
+
 ## Project Structure
 
 ```
 src/
   app.ts                 Agent logic, extractJson, processHandler (exports)
   main.ts                Entry point (imports app, calls app.run())
+  lib/
+    airs-api-client.ts   Prisma AIRS API client (prompt + response scanning)
   schemas/
     recipe.ts            Zod schemas for Recipe and Ingredient
   tools/
