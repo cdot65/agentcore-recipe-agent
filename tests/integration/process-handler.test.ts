@@ -42,6 +42,7 @@ const validRecipe = {
 
 function mockContext() {
   return {
+    sessionId: "test-session-id",
     log: {
       info: vi.fn(),
       error: vi.fn(),
@@ -91,6 +92,20 @@ describe("processHandler", () => {
     expect(result).toEqual(validRecipe);
   });
 
+  it("throws and logs when agent invocation fails", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("Model timeout"));
+
+    const ctx = mockContext();
+    await expect(processHandler({ url: "https://example.com/recipe" }, ctx)).rejects.toThrow(
+      "Model timeout",
+    );
+
+    expect(ctx.log.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: "Error: Model timeout" }),
+      "Agent invocation failed",
+    );
+  });
+
   it("throws when agent returns no JSON", async () => {
     mockInvoke.mockResolvedValueOnce(mockAgentResult("I could not find a recipe on that page."));
 
@@ -125,7 +140,7 @@ describe("processHandler", () => {
     await processHandler({ url: "https://example.com/recipe" }, ctx);
 
     expect(ctx.log.info).toHaveBeenCalledWith(
-      { url: "https://example.com/recipe" },
+      { url: "https://example.com/recipe", sessionId: "test-session-id" },
       "Extracting recipe",
     );
   });
