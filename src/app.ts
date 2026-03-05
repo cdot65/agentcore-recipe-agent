@@ -3,7 +3,7 @@ import { BedrockAgentCoreApp } from "bedrock-agentcore/runtime";
 import { z } from "zod";
 import { PrismaAIRSClient } from "./lib/airs-api-client.js";
 import { createCloudWatchStream, createTeeStream } from "./lib/cloudwatch-stream.js";
-import { RecipeSchema } from "./schemas/recipe.js";
+import { type Recipe, RecipeSchema } from "./schemas/recipe.js";
 import { fetchUrlTool } from "./tools/fetch-url.js";
 
 export const SYSTEM_PROMPT = `You are a recipe extraction agent. When given a URL:
@@ -90,23 +90,30 @@ export const processHandler = async (
     log: {
       info: (obj: unknown, msg: string) => void;
       warn: (obj: unknown, msg: string) => void;
+      error: (obj: unknown, msg: string) => void;
     };
   },
 ) => {
-  context.log.info({ url: request.url }, "Extracting recipe");
+  const start = Date.now();
+  context.log.info({ url: request.url, sessionId: context.sessionId }, "Extracting recipe");
 
   const prompt = `Extract the recipe from this URL: ${request.url}`;
   const scanMeta = { sessionId: context.sessionId };
 
   // Pre-scan: check inbound prompt for threats
   if (airsClient.isEnabled()) {
+    context.log.info({}, "AIRS prompt scan starting");
     const promptScan = await airsClient.scanPrompt(prompt, scanMeta);
     context.log.info(
-      { action: promptScan?.action, scanId: promptScan?.scan_id },
-      "AIRS prompt scan",
+      { action: promptScan?.action, scanId: promptScan?.scan_id, durationMs: Date.now() - start },
+      "AIRS prompt scan complete",
     );
 
     if (promptScan?.action === "block") {
+      context.log.warn(
+        { category: promptScan.category, scanId: promptScan.scan_id },
+        "Request blocked by AIRS",
+      );
       return {
         error: "blocked",
         message: "Request blocked by Prisma AIRS security.",
@@ -116,21 +123,60 @@ export const processHandler = async (
     }
   }
 
-  const result: AgentResult = await agent.invoke(prompt);
+  const agentStart = Date.now();
+  context.log.info(
+    { model: "us.anthropic.claude-haiku-4-5-20251001-v1:0" },
+    "Agent invocation starting",
+  );
+
+  let result: AgentResult;
+  try {
+    result = await agent.invoke(prompt);
+  } catch (err) {
+    context.log.error(
+      { error: String(err), durationMs: Date.now() - agentStart },
+      "Agent invocation failed",
+    );
+    throw err;
+  }
+
+  const agentDurationMs = Date.now() - agentStart;
+  context.log.info({ agentDurationMs }, "Agent invocation complete");
 
   const responseText = result.toString();
-  const parsed = extractJson(responseText);
-  const recipe = RecipeSchema.parse(parsed);
+  context.log.info({ responseLength: responseText.length }, "Parsing agent response");
+
+  let recipe: Recipe;
+  try {
+    const parsed = extractJson(responseText);
+    recipe = RecipeSchema.parse(parsed);
+  } catch (err) {
+    context.log.error(
+      { error: String(err), responsePreview: responseText.slice(0, 200) },
+      "Failed to parse recipe from agent response",
+    );
+    throw err;
+  }
+
+  context.log.info(
+    { title: recipe.title, ingredientCount: recipe.ingredients.length },
+    "Recipe extracted successfully",
+  );
 
   // Post-scan: check outbound response for threats
   if (airsClient.isEnabled()) {
+    context.log.info({}, "AIRS response scan starting");
     const responseScan = await airsClient.scanResponse(JSON.stringify(recipe), prompt, scanMeta);
     context.log.info(
       { action: responseScan?.action, scanId: responseScan?.scan_id },
-      "AIRS response scan",
+      "AIRS response scan complete",
     );
 
     if (responseScan?.action === "block") {
+      context.log.warn(
+        { category: responseScan.category, scanId: responseScan.scan_id },
+        "Response blocked by AIRS",
+      );
       return {
         error: "blocked",
         message: "Response blocked by Prisma AIRS security.",
@@ -139,6 +185,9 @@ export const processHandler = async (
       };
     }
   }
+
+  const totalDurationMs = Date.now() - start;
+  context.log.info({ totalDurationMs, title: recipe.title }, "Request complete");
 
   return recipe;
 };

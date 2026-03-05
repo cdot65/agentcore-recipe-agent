@@ -42,6 +42,7 @@ const validRecipe = {
 
 function mockContext() {
   return {
+    sessionId: "test-session-id",
     log: {
       info: vi.fn(),
       error: vi.fn(),
@@ -125,7 +126,7 @@ describe("processHandler", () => {
     await processHandler({ url: "https://example.com/recipe" }, ctx);
 
     expect(ctx.log.info).toHaveBeenCalledWith(
-      { url: "https://example.com/recipe" },
+      { url: "https://example.com/recipe", sessionId: "test-session-id" },
       "Extracting recipe",
     );
   });
