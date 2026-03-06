@@ -157,7 +157,7 @@ export const processHandler = async (
       error: (obj: unknown, msg: string) => void;
     };
   },
-) => {
+): Promise<Recipe | { error: string; message: string; [key: string]: unknown }> => {
   const start = Date.now();
 
   // Accept {"url": "..."} or {"prompt": "natural language with URL"}
@@ -166,9 +166,10 @@ export const processHandler = async (
     url = extractUrl(request.prompt) ?? undefined;
   }
   if (!url) {
-    throw new Error(
-      'No URL found in request. Provide {"url": "..."} or a prompt containing a URL.',
-    );
+    return {
+      error: "bad_request",
+      message: 'No URL found in request. Provide {"url": "..."} or a prompt containing a URL.',
+    };
   }
 
   context.log.info({ url, sessionId: context.sessionId }, "Extracting recipe");
@@ -230,7 +231,7 @@ export const processHandler = async (
       { error: String(err), durationMs: Date.now() - agentStart },
       "Agent invocation failed",
     );
-    throw err;
+    return { error: "agent_error", message: `Agent invocation failed: ${String(err)}` };
   }
 
   const agentDurationMs = Date.now() - agentStart;
@@ -248,7 +249,7 @@ export const processHandler = async (
       { error: String(err), responsePreview: responseText.slice(0, 200) },
       "Failed to parse recipe from agent response",
     );
-    throw err;
+    return { error: "parse_error", message: `Failed to parse recipe: ${String(err)}` };
   }
 
   context.log.info(

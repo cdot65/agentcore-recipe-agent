@@ -115,35 +115,43 @@ describe("processHandler", () => {
     expect(result).toEqual(validRecipe);
   });
 
-  it("throws and logs when agent invocation fails", async () => {
+  it("returns error object when agent invocation fails", async () => {
     mockInvoke.mockRejectedValueOnce(new Error("Model timeout"));
 
     const ctx = mockContext();
-    await expect(processHandler({ url: "https://example.com/recipe" }, ctx)).rejects.toThrow(
-      "Model timeout",
-    );
+    const result = await processHandler({ url: "https://example.com/recipe" }, ctx);
 
+    expect(result).toEqual({
+      error: "agent_error",
+      message: expect.stringContaining("Model timeout"),
+    });
     expect(ctx.log.error).toHaveBeenCalledWith(
       expect.objectContaining({ error: "Error: Model timeout" }),
       "Agent invocation failed",
     );
   });
 
-  it("throws when agent returns no JSON", async () => {
+  it("returns error object when agent returns no JSON", async () => {
     mockInvoke.mockResolvedValueOnce(mockAgentResult("I could not find a recipe on that page."));
 
-    await expect(
-      processHandler({ url: "https://example.com/recipe" }, mockContext()),
-    ).rejects.toThrow("Could not extract JSON from agent response");
+    const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
+
+    expect(result).toEqual({
+      error: "parse_error",
+      message: expect.stringContaining("Could not extract JSON"),
+    });
   });
 
-  it("throws when JSON fails schema validation", async () => {
+  it("returns error object when JSON fails schema validation", async () => {
     const invalid = { title: "Missing fields" }; // no ingredients, etc.
     mockInvoke.mockResolvedValueOnce(mockAgentResult(JSON.stringify(invalid)));
 
-    await expect(
-      processHandler({ url: "https://example.com/recipe" }, mockContext()),
-    ).rejects.toThrow();
+    const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
+
+    expect(result).toEqual({
+      error: "parse_error",
+      message: expect.stringContaining("Failed to parse recipe"),
+    });
   });
 
   it("calls agent.invoke with correct prompt", async () => {
@@ -467,14 +475,22 @@ describe("processHandler", () => {
       );
     });
 
-    it("throws when prompt has no URL", async () => {
-      await expect(
-        processHandler({ prompt: "make me a recipe for pasta" }, mockContext()),
-      ).rejects.toThrow("No URL found in request");
+    it("returns error when prompt has no URL", async () => {
+      const result = await processHandler({ prompt: "make me a recipe for pasta" }, mockContext());
+
+      expect(result).toEqual({
+        error: "bad_request",
+        message: expect.stringContaining("No URL found"),
+      });
     });
 
-    it("throws when neither url nor prompt provided", async () => {
-      await expect(processHandler({}, mockContext())).rejects.toThrow("No URL found in request");
+    it("returns error when neither url nor prompt provided", async () => {
+      const result = await processHandler({}, mockContext());
+
+      expect(result).toEqual({
+        error: "bad_request",
+        message: expect.stringContaining("No URL found"),
+      });
     });
   });
 

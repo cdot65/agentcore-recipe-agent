@@ -212,11 +212,13 @@ describe("fetchUrlTool", () => {
       await fetchUrlTool.invoke({ url: "https://example.com" });
 
       expect(mockFetch).toHaveBeenCalledWith("https://example.com", {
-        headers: {
+        headers: expect.objectContaining({
           "User-Agent": expect.stringContaining("Mozilla/5.0"),
           Accept: expect.stringContaining("text/html"),
           "Accept-Language": "en-US,en;q=0.9",
-        },
+          "Sec-Fetch-Dest": "document",
+          "Sec-Fetch-Mode": "navigate",
+        }),
         redirect: "follow",
       });
     });
