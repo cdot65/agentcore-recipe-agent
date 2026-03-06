@@ -16,7 +16,7 @@ vi.mock("bedrock-agentcore/runtime", () => ({
   },
 }));
 
-import { extractJson } from "../../src/app.js";
+import { extractJson, extractUrl } from "../../src/app.js";
 
 describe("extractJson", () => {
   describe("tier 1: direct JSON.parse", () => {
@@ -94,5 +94,41 @@ describe("extractJson", () => {
       const input = '{"a":1}';
       expect(extractJson(input)).toEqual({ a: 1 });
     });
+  });
+});
+
+describe("extractUrl", () => {
+  it("extracts URL from natural language", () => {
+    expect(extractUrl("Extract the recipe from https://example.com/recipe please")).toBe(
+      "https://example.com/recipe",
+    );
+  });
+
+  it("extracts URL with path and query params", () => {
+    expect(extractUrl("Get https://example.com/recipe?id=123&lang=en")).toBe(
+      "https://example.com/recipe?id=123&lang=en",
+    );
+  });
+
+  it("extracts http URL", () => {
+    expect(extractUrl("try http://example.com/page")).toBe("http://example.com/page");
+  });
+
+  it("returns first URL when multiple present", () => {
+    expect(extractUrl("compare https://a.com and https://b.com")).toBe("https://a.com");
+  });
+
+  it("returns null when no URL present", () => {
+    expect(extractUrl("just some text with no links")).toBeNull();
+  });
+
+  it("returns null for empty string", () => {
+    expect(extractUrl("")).toBeNull();
+  });
+
+  it("extracts bare URL", () => {
+    expect(extractUrl("https://pinchofyum.com/chicken-wontons")).toBe(
+      "https://pinchofyum.com/chicken-wontons",
+    );
   });
 });
