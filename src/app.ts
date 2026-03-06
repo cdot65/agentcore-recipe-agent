@@ -157,7 +157,7 @@ export const processHandler = async (
       error: (obj: unknown, msg: string) => void;
     };
   },
-): Promise<string> => {
+): Promise<Recipe | { error: string; message: string; [key: string]: unknown }> => {
   const start = Date.now();
 
   // Accept {"url": "..."} or {"prompt": "natural language with URL"}
@@ -166,10 +166,10 @@ export const processHandler = async (
     url = extractUrl(request.prompt) ?? undefined;
   }
   if (!url) {
-    return JSON.stringify({
+    return {
       error: "bad_request",
       message: 'No URL found in request. Provide {"url": "..."} or a prompt containing a URL.',
-    });
+    };
   }
 
   context.log.info({ url, sessionId: context.sessionId }, "Extracting recipe");
@@ -208,12 +208,12 @@ export const processHandler = async (
         { category: promptScan.category, scanId: promptScan.scan_id },
         "Request blocked by AIRS",
       );
-      return JSON.stringify({
+      return {
         error: "blocked",
         message: "Request blocked by Prisma AIRS security.",
         category: promptScan.category,
         scan_id: promptScan.scan_id,
-      });
+      };
     }
   }
 
@@ -231,10 +231,7 @@ export const processHandler = async (
       { error: String(err), durationMs: Date.now() - agentStart },
       "Agent invocation failed",
     );
-    return JSON.stringify({
-      error: "agent_error",
-      message: `Agent invocation failed: ${String(err)}`,
-    });
+    return { error: "agent_error", message: `Agent invocation failed: ${String(err)}` };
   }
 
   const agentDurationMs = Date.now() - agentStart;
@@ -252,10 +249,7 @@ export const processHandler = async (
       { error: String(err), responsePreview: responseText.slice(0, 200) },
       "Failed to parse recipe from agent response",
     );
-    return JSON.stringify({
-      error: "parse_error",
-      message: `Failed to parse recipe: ${String(err)}`,
-    });
+    return { error: "parse_error", message: `Failed to parse recipe: ${String(err)}` };
   }
 
   context.log.info(
@@ -300,19 +294,19 @@ export const processHandler = async (
         { category: responseScan.category, scanId: responseScan.scan_id },
         "Response blocked by AIRS",
       );
-      return JSON.stringify({
+      return {
         error: "blocked",
         message: "Response blocked by Prisma AIRS security.",
         category: responseScan.category,
         scan_id: responseScan.scan_id,
-      });
+      };
     }
   }
 
   const totalDurationMs = Date.now() - start;
   context.log.info({ totalDurationMs, title: recipe.title }, "Request complete");
 
-  return JSON.stringify(recipe);
+  return recipe;
 };
 
 const LOG_GROUP = "/aws/bedrock/agentcore/recipe-extraction-agent";
