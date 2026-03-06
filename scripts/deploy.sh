@@ -12,7 +12,7 @@ set -euo pipefail
 #   AGENTCORE_RUNTIME_ID           # from first deploy output
 #
 # Optional env vars passed to runtime:
-#   PRISMA_AIRS_PROFILE_NAME    (PRISMA_AIRS_API_KEY is in Secrets Manager)
+#   PRISMA_AIRS_PROFILE_NAME    (PANW_AI_SEC_API_KEY is in Secrets Manager)
 ###############################################################################
 
 REGION="${AWS_REGION:-us-west-2}"

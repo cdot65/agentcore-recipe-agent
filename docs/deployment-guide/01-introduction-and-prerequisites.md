@@ -154,10 +154,10 @@ cp .env.example .env
 The `.env.example` file:
 
 ```bash
-# Prisma AIRS AI Runtime Security
-# PRISMA_AIRS_API_KEY is fetched from Secrets Manager in prod.
+# Prisma AIRS AI Runtime Security (uses @cdot65/prisma-airs-sdk)
+# PANW_AI_SEC_API_KEY is fetched from Secrets Manager in prod.
 # Set here for local dev only.
-PRISMA_AIRS_API_KEY=
+PANW_AI_SEC_API_KEY=
 PRISMA_AIRS_PROFILE_NAME=
 
 # AWS Bedrock Agent metadata (optional, for AIRS agent discovery)

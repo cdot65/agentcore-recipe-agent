@@ -92,7 +92,7 @@ The agent integrates [Prisma AIRS](https://docs.paloaltonetworks.com/prisma/pris
 Configure via `.env` (see `.env.example`):
 
 ```bash
-PRISMA_AIRS_API_KEY=your-api-key
+PANW_AI_SEC_API_KEY=your-api-key
 PRISMA_AIRS_PROFILE_NAME=your-profile-name
 
 # Optional: agent metadata for AIRS agent discovery
@@ -122,7 +122,7 @@ src/
   app.ts                 Agent logic, extractJson, processHandler (exports)
   main.ts                Entry point (imports app, calls app.run())
   lib/
-    airs-api-client.ts   Prisma AIRS API client (prompt + response scanning)
+    cloudwatch-stream.ts Custom CloudWatch log stream
   schemas/
     recipe.ts            Zod schemas for Recipe and Ingredient
   tools/
@@ -149,6 +149,7 @@ tests/
 |---|---|
 | `bedrock-agentcore` | Runtime server (Fastify on :8080) |
 | `@strands-agents/sdk` | Agent framework (Agent, BedrockModel, tool) |
+| `@cdot65/prisma-airs-sdk` | Prisma AIRS AI Runtime Security scanning |
 | `zod` v4 | Request/response schema validation |
 | `linkedom` | Lightweight HTML parsing (~200KB vs jsdom's 70MB) |
 

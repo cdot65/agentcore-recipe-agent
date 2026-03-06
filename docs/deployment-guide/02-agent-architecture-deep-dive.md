@@ -19,10 +19,9 @@ The entry point handles one concern: fetching secrets before the server starts.
 ```typescript
 // src/main.ts
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
-import { app } from "./app.js";
 
 async function bootstrap() {
-  if (!process.env.PRISMA_AIRS_API_KEY) {
+  if (!process.env.PANW_AI_SEC_API_KEY) {
     try {
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-west-2",
@@ -33,12 +32,15 @@ async function bootstrap() {
         }),
       );
       if (secret.SecretString) {
-        process.env.PRISMA_AIRS_API_KEY = secret.SecretString;
+        process.env.PANW_AI_SEC_API_KEY = secret.SecretString;
       }
     } catch {
-      console.warn("Secrets Manager unavailable, using env var for PRISMA_AIRS_API_KEY");
+      console.warn("Secrets Manager unavailable, using env var for PANW_AI_SEC_API_KEY");
     }
   }
+
+  // Dynamic import so app.ts module-level init() sees the env var
+  const { app } = await import("./app.js");
   app.run();
 }
 
@@ -48,6 +50,7 @@ bootstrap();
 **Key points:**
 - Only fetches from Secrets Manager if the env var isn't already set (local dev uses `.env`)
 - Fails silently — if Secrets Manager is unavailable, the agent runs without AIRS
+- Uses a **dynamic import** for `app.ts` — the `@cdot65/prisma-airs-sdk` `init()` call runs at module load time, so the API key must be in `process.env` *before* the import
 - Calls `app.run()` to start the Fastify server on port 8080
 
 ### `src/app.ts` — Agent + Server
@@ -267,19 +270,27 @@ If the LLM output doesn't match the schema, `RecipeSchema.parse()` throws with d
 The handler ties everything together:
 
 ```typescript
-// src/app.ts, lines 77-123
+// src/app.ts (simplified)
 export const processHandler = async (
   request: { url: string },
-  context: { sessionId: string; log: { info: Function; warn: Function } },
+  context: { sessionId: string; log: { info; warn; error } },
 ) => {
-  context.log.info({ url: request.url }, "Extracting recipe");
-
   const prompt = `Extract the recipe from this URL: ${request.url}`;
-  const scanMeta = { sessionId: context.sessionId };
+  context.log.info({ url: request.url, sessionId: context.sessionId }, "Extracting recipe");
 
-  // 1. Pre-scan: check inbound prompt
-  if (airsClient.isEnabled()) {
-    const promptScan = await airsClient.scanPrompt(prompt, scanMeta);
+  // 1. Pre-scan: check inbound prompt (uses @cdot65/prisma-airs-sdk Scanner)
+  if (scanner) {
+    const metadata = buildMetadata();
+    let promptScan: ScanResponse | undefined;
+    try {
+      promptScan = await scanner.syncScan(
+        { profile_name: airsProfileName },
+        new Content({ prompt }),
+        { sessionId: context.sessionId, metadata },
+      );
+    } catch (err) {
+      context.log.error({ ...scanErrorFields(err) }, "AIRS prompt scan failed, proceeding unscanned");
+    }
     if (promptScan?.action === "block") {
       return { error: "blocked", message: "Request blocked by Prisma AIRS security.", ... };
     }
@@ -289,13 +300,21 @@ export const processHandler = async (
   const result: AgentResult = await agent.invoke(prompt);
 
   // 3. Parse + validate
-  const responseText = result.toString();
-  const parsed = extractJson(responseText);
+  const parsed = extractJson(result.toString());
   const recipe = RecipeSchema.parse(parsed);
 
   // 4. Post-scan: check outbound response
-  if (airsClient.isEnabled()) {
-    const responseScan = await airsClient.scanResponse(JSON.stringify(recipe), prompt, scanMeta);
+  if (scanner) {
+    let responseScan: ScanResponse | undefined;
+    try {
+      responseScan = await scanner.syncScan(
+        { profile_name: airsProfileName },
+        new Content({ prompt, response: JSON.stringify(recipe) }),
+        { sessionId: context.sessionId, metadata: buildMetadata() },
+      );
+    } catch (err) {
+      context.log.error({ ...scanErrorFields(err) }, "AIRS response scan failed, proceeding unscanned");
+    }
     if (responseScan?.action === "block") {
       return { error: "blocked", message: "Response blocked by Prisma AIRS security.", ... };
     }
@@ -304,6 +323,8 @@ export const processHandler = async (
   return recipe;
 };
 ```
+
+The AIRS integration uses the `@cdot65/prisma-airs-sdk` package — see [Part 3: Security with Prisma AIRS](./03-security-with-prisma-airs.md) for the full SDK setup details including `init()`, `Scanner`, `Content`, and `buildMetadata()`.
 
 ## BedrockAgentCoreApp Wiring
 

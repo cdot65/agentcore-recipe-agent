@@ -39,167 +39,150 @@ The integration point is simple: a REST API call before and after LLM invocation
 
 For detailed setup instructions, refer to the [Prisma AIRS documentation](https://docs.paloaltonetworks.com/ai-runtime-security).
 
-## The PrismaAIRSClient
+## The `@cdot65/prisma-airs-sdk`
 
-The client lives in `src/lib/airs-api-client.ts`. It's a focused class with four public methods.
+This project uses the [`@cdot65/prisma-airs-sdk`](https://www.npmjs.com/package/@cdot65/prisma-airs-sdk) — a TypeScript SDK for Palo Alto Networks AI Runtime Security that mirrors the official Python SDK.
 
-### Constructor
+### Installation
 
-```typescript
-// src/lib/airs-api-client.ts
-export class PrismaAIRSClient {
-  private readonly apiUrl: string;
-  private readonly apiKey: string;
-  private readonly profileName: string;
-  private readonly logger: Logger;
-
-  constructor(config?: {
-    apiUrl?: string;
-    apiKey?: string;
-    profileName?: string;
-    logger?: Logger;
-  }) {
-    this.apiUrl =
-      config?.apiUrl ||
-      process.env.PRISMA_AIRS_API_URL ||
-      "https://service.api.aisecurity.paloaltonetworks.com/v1/scan/sync/request";
-    this.apiKey = config?.apiKey || process.env.PRISMA_AIRS_API_KEY || "";
-    this.profileName = config?.profileName || process.env.PRISMA_AIRS_PROFILE_NAME || "";
-    this.logger = config?.logger || console;
-  }
+```bash
+npm install @cdot65/prisma-airs-sdk
 ```
 
-Configuration cascades: explicit config > env vars > defaults. The API URL defaults to the Prisma AIRS production endpoint.
+### SDK Initialization
 
-### `isEnabled()`
-
-```typescript
-  isEnabled(): boolean {
-    return Boolean(this.apiKey && this.profileName);
-  }
-```
-
-Returns `true` only when both API key and profile name are set. This enables **fail-open design** — if AIRS isn't configured, the agent operates normally without security scanning.
-
-### `scanPrompt()` — Pre-LLM Gate
+The SDK uses a global `init()` function to configure credentials:
 
 ```typescript
-  async scanPrompt(
-    prompt: string,
-    metadata?: { sessionId?: string; appUser?: string },
-  ): Promise<AIRSScanResponse | null> {
-    if (!this.apiKey) return null;
+import { init, Scanner, Content } from '@cdot65/prisma-airs-sdk';
 
-    const request: AIRSScanRequest = {
-      tr_id: `${Date.now()}-${randomUUID().slice(0, 8)}`,
-      session_id: metadata?.sessionId,
-      ai_profile: { profile_name: this.profileName },
-      metadata: this.buildMetadata(metadata?.appUser),
-      contents: [{ prompt }],
-    };
+// Initialize with API key (or set PANW_AI_SEC_API_KEY env var)
+init({ apiKey: 'your-api-key' });
 
-    return this.send(request);
-  }
+const scanner = new Scanner();
 ```
 
-Called **before** the LLM invocation. Sends only the `prompt` field in `contents`. If AIRS returns `action: "block"`, the agent short-circuits and never calls Bedrock.
+### Scanning
 
-### `scanResponse()` — Post-LLM Gate
+The `Scanner` class provides `syncScan()` for real-time prompt and response scanning:
 
 ```typescript
-  async scanResponse(
-    response: string,
-    originalPrompt: string,
-    metadata?: { sessionId?: string; appUser?: string },
-  ): Promise<AIRSScanResponse | null> {
-    if (!this.apiKey) return null;
+const result = await scanner.syncScan(
+  { profile_name: 'my-profile' },
+  new Content({ prompt: 'user input' }),
+  {
+    sessionId: 'session-123',
+    metadata: {
+      app_name: 'my-agent',
+      ai_model: 'claude-haiku-4.5',
+    },
+  },
+);
 
-    const request: AIRSScanRequest = {
-      tr_id: `${Date.now()}-${randomUUID().slice(0, 8)}`,
-      session_id: metadata?.sessionId,
-      ai_profile: { profile_name: this.profileName },
-      metadata: this.buildMetadata(metadata?.appUser),
-      contents: [{ prompt: originalPrompt, response }],
-    };
-
-    return this.send(request);
-  }
+console.log(result.action);   // "allow" | "block"
+console.log(result.category); // "benign" | "prompt_injection" | ...
 ```
 
-Called **after** the LLM produces output, but **before** it's returned to the client. Sends both the original prompt and the response for context-aware analysis.
-
-### `buildMetadata()` — Agent Discovery
+For response scanning, pass both the prompt and response:
 
 ```typescript
-  private buildMetadata(appUser?: string): AIRSScanRequest["metadata"] {
-    const agentId = process.env.BEDROCK_AGENT_ID;
-    const region = process.env.AWS_REGION || "us-west-2";
-    const accountId = process.env.AWS_ACCOUNT_ID;
-
-    return {
-      app_name: "recipe-extraction-agent",
-      app_user: appUser || "anonymous",
-      ai_model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-      agent_meta: agentId
-        ? {
-            agent_id: agentId,
-            agent_version: process.env.BEDROCK_AGENT_VERSION || "1",
-            agent_arn: accountId
-              ? `arn:aws:bedrock:${region}:${accountId}:agent/${agentId}`
-              : undefined,
-          }
-        : undefined,
-    };
-  }
+const result = await scanner.syncScan(
+  { profile_name: 'my-profile' },
+  new Content({ prompt: 'user input', response: 'model output' }),
+  { sessionId: 'session-123', metadata },
+);
 ```
 
-This populates AWS agent metadata in every scan request. When `BEDROCK_AGENT_ID` is set (after deployment), the AIRS dashboard can link scan results back to the specific AgentCore runtime.
+### Error Handling
 
-### `send()` — HTTP Transport
+The SDK throws `AISecSDKException` with a typed `errorType` field:
 
 ```typescript
-  private async send(request: AIRSScanRequest): Promise<AIRSScanResponse | null> {
-    try {
-      const response = await fetch(this.apiUrl, {
-        method: "POST",
-        headers: {
-          "x-pan-token": this.apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(request),
-      });
+import { AISecSDKException } from '@cdot65/prisma-airs-sdk';
 
-      if (!response.ok) {
-        this.logger.error(`AIRS API error: ${response.status} ${response.statusText}`);
-        return null;
-      }
-
-      return (await response.json()) as AIRSScanResponse;
-    } catch (error) {
-      this.logger.error("AIRS API request failed:", error);
-      return null;
-    }
+try {
+  await scanner.syncScan(profile, content);
+} catch (err) {
+  if (err instanceof AISecSDKException) {
+    console.error(err.errorType); // e.g. "AISEC_SERVER_SIDE_ERROR"
   }
+}
 ```
 
-**Fail-open on errors:** If the AIRS API is unreachable or returns an error, the method returns `null` and the agent continues. This prevents a third-party service outage from taking down your agent.
+Error types: `SERVER_SIDE_ERROR`, `CLIENT_SIDE_ERROR`, `USER_REQUEST_PAYLOAD_ERROR`, `MISSING_VARIABLE`, `AISEC_SDK_ERROR`, `OAUTH_ERROR`.
 
-## Integration in processHandler
+## Integration in the Agent
 
-The AIRS checks are wired into the request handler in `src/app.ts`:
+The AIRS integration is wired directly into `src/app.ts` using the SDK.
+
+### Initialization
+
+```typescript
+// src/app.ts
+import { Content, init, Scanner, type ScanResponse } from "@cdot65/prisma-airs-sdk";
+
+const airsApiKey = process.env.PANW_AI_SEC_API_KEY || "";
+const airsProfileName = process.env.PRISMA_AIRS_PROFILE_NAME || "";
+export const airsEnabled = Boolean(airsApiKey && airsProfileName);
+
+if (airsEnabled) {
+  init({ apiKey: airsApiKey });
+}
+
+const scanner = airsEnabled ? new Scanner() : null;
+```
+
+**Fail-open design:** If `PANW_AI_SEC_API_KEY` or `PRISMA_AIRS_PROFILE_NAME` are not set, `scanner` is `null` and all scanning is skipped. The agent operates normally without security scanning.
+
+### Metadata Builder
+
+Every scan request includes agent metadata for traceability in the AIRS dashboard:
+
+```typescript
+function buildMetadata() {
+  const agentId = process.env.BEDROCK_AGENT_ID;
+  const region = process.env.AWS_REGION || "us-west-2";
+  const accountId = process.env.AWS_ACCOUNT_ID;
+
+  return {
+    app_name: "recipe-extraction-agent",
+    app_user: "anonymous",
+    ai_model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    agent_meta: agentId
+      ? {
+          agent_id: agentId,
+          agent_version: process.env.BEDROCK_AGENT_VERSION || "1",
+          agent_arn: accountId
+            ? `arn:aws:bedrock:${region}:${accountId}:agent/${agentId}`
+            : undefined,
+        }
+      : undefined,
+  };
+}
+```
+
+When `BEDROCK_AGENT_ID` is set (after deployment), the AIRS dashboard can link scan results back to the specific AgentCore runtime.
+
+### Request Handler Integration
 
 ```typescript
 // src/app.ts — processHandler (simplified)
-const airsClient = new PrismaAIRSClient();
-
 export const processHandler = async (request, context) => {
   const prompt = `Extract the recipe from this URL: ${request.url}`;
-  const scanMeta = { sessionId: context.sessionId };
 
   // PRE-SCAN: check inbound prompt
-  if (airsClient.isEnabled()) {
-    const promptScan = await airsClient.scanPrompt(prompt, scanMeta);
-    context.log.info({ action: promptScan?.action, scanId: promptScan?.scan_id }, "AIRS prompt scan");
+  if (scanner) {
+    const metadata = buildMetadata();
+    let promptScan: ScanResponse | undefined;
+    try {
+      promptScan = await scanner.syncScan(
+        { profile_name: airsProfileName },
+        new Content({ prompt }),
+        { sessionId: context.sessionId, metadata },
+      );
+    } catch (err) {
+      context.log.error({ err }, "AIRS prompt scan failed, proceeding unscanned");
+    }
 
     if (promptScan?.action === "block") {
       return {
@@ -214,9 +197,17 @@ export const processHandler = async (request, context) => {
   // ... agent invocation, JSON parsing, Zod validation ...
 
   // POST-SCAN: check outbound response
-  if (airsClient.isEnabled()) {
-    const responseScan = await airsClient.scanResponse(JSON.stringify(recipe), prompt, scanMeta);
-    context.log.info({ action: responseScan?.action, scanId: responseScan?.scan_id }, "AIRS response scan");
+  if (scanner) {
+    let responseScan: ScanResponse | undefined;
+    try {
+      responseScan = await scanner.syncScan(
+        { profile_name: airsProfileName },
+        new Content({ prompt, response: JSON.stringify(recipe) }),
+        { sessionId: context.sessionId, metadata: buildMetadata() },
+      );
+    } catch (err) {
+      context.log.error({ err }, "AIRS response scan failed, proceeding unscanned");
+    }
 
     if (responseScan?.action === "block") {
       return {
@@ -247,53 +238,85 @@ When AIRS blocks a request, the agent returns:
 
 The `category` field tells the client *why* it was blocked. The `scan_id` can be used to look up details in the Prisma AIRS dashboard.
 
-## Request/Response Interfaces
+## Debug Logging
 
-```typescript
-// src/lib/airs-api-client.ts
+Every scan produces comprehensive debug logs visible in CloudWatch:
 
-export interface AIRSScanRequest {
-  tr_id: string;
-  session_id?: string;
-  ai_profile: { profile_name: string };
-  metadata?: {
-    app_name?: string;
-    app_user?: string;
-    ai_model?: string;
-    agent_meta?: {
-      agent_id?: string;
-      agent_version?: string;
-      agent_arn?: string;
-    };
-  };
-  contents: Array<{ prompt?: string; response?: string }>;
-}
+| Log Message | Fields |
+|---|---|
+| `AIRS SDK status` | `airsEnabled`, `airsProfileName` |
+| `AIRS prompt scan starting` | `promptLength`, `profileName`, `metadata` (includes `agent_meta`) |
+| `AIRS prompt scan complete` | `action`, `category`, `scanId`, `reportId`, `profileId`, `profileName`, `trId`, `promptDetected`, `responseDetected`, `durationMs` |
+| `AIRS prompt scan failed, proceeding unscanned` | `err`, `errorType` (if `AISecSDKException`), `durationMs` |
+| `AIRS response scan starting` | `promptLength`, `responseLength`, `profileName`, `metadata` |
+| `AIRS response scan complete` | Same fields as prompt scan complete + `durationMs` |
+| `AIRS response scan failed, proceeding unscanned` | Same fields as prompt scan failed |
 
-export interface AIRSScanResponse {
-  action: "allow" | "block";
-  category: string;
-  profile_id: string;
-  profile_name: string;
-  prompt_detected?: AIRSDetectionFlags;
-  response_detected?: AIRSDetectionFlags;
-  report_id?: string;
-  scan_id: string;
-  tr_id: string;
+Example CloudWatch log entry:
+
+```json
+{
+  "level": 30,
+  "time": 1772756869372,
+  "action": "allow",
+  "category": "benign",
+  "scanId": "0be93d6b-cc74-435f-b19b-c6b861cc927f",
+  "reportId": "R0be93d6b-cc74-435f-b19b-c6b861cc927f",
+  "profileId": "2225ece2-0cc3-4235-affe-78f9433a3da3",
+  "profileName": "Recipe Extractor AWS Agent",
+  "promptDetected": {
+    "agent": false,
+    "injection": false,
+    "toxic_content": false,
+    "url_cats": false
+  },
+  "durationMs": 441,
+  "msg": "AIRS prompt scan complete"
 }
 ```
+
+## Secret Management
+
+The AIRS API key is stored in AWS Secrets Manager — never baked into the Docker image or passed as a plain environment variable.
+
+At runtime, `src/main.ts` fetches the secret during bootstrap **before** importing the app module:
+
+```typescript
+// src/main.ts
+async function bootstrap() {
+  if (!process.env.PANW_AI_SEC_API_KEY) {
+    try {
+      const sm = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-west-2" });
+      const secret = await sm.send(
+        new GetSecretValueCommand({ SecretId: "recipe-agent/prisma-airs-api-key" }),
+      );
+      if (secret.SecretString) {
+        process.env.PANW_AI_SEC_API_KEY = secret.SecretString;
+      }
+    } catch {
+      console.warn("Secrets Manager unavailable, using env var for PANW_AI_SEC_API_KEY");
+    }
+  }
+
+  // Dynamic import ensures init() in app.ts sees the env var
+  const { app } = await import("./app.js");
+  app.run();
+}
+```
+
+The dynamic import is critical: `app.ts` runs `init()` at module load time, so the API key must be in the environment *before* the import.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `PRISMA_AIRS_API_KEY` | No | API key for authentication. Fetched from Secrets Manager in prod. |
+| `PANW_AI_SEC_API_KEY` | No | API key for authentication. Fetched from Secrets Manager in prod. |
 | `PRISMA_AIRS_PROFILE_NAME` | No | Name of the AIRS security profile to use |
-| `PRISMA_AIRS_API_URL` | No | Override the default API endpoint |
 | `BEDROCK_AGENT_ID` | No | AgentCore runtime ID (set after deployment, used in metadata) |
 | `BEDROCK_AGENT_VERSION` | No | Agent version (defaults to "1") |
 | `AWS_ACCOUNT_ID` | No | Used to construct the agent ARN in metadata |
 
-All are optional. If `PRISMA_AIRS_API_KEY` and `PRISMA_AIRS_PROFILE_NAME` are not set, AIRS is completely disabled and the agent handles requests without scanning.
+All are optional. If `PANW_AI_SEC_API_KEY` and `PRISMA_AIRS_PROFILE_NAME` are not set, AIRS is completely disabled and the agent handles requests without scanning.
 
 ---
 

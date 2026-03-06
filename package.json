@@ -26,6 +26,7 @@
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1002.0",
     "@aws-sdk/client-secrets-manager": "^3.998.0",
+    "@cdot65/prisma-airs-sdk": "^0.2.0",
     "@strands-agents/sdk": "^0.4.0",
     "bedrock-agentcore": "^0.2.0",
     "linkedom": "^0.18.0",

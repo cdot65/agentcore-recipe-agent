@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ###############################################################################
-# Create Secrets Manager secret for PRISMA_AIRS_API_KEY
+# Create Secrets Manager secret for PANW_AI_SEC_API_KEY
 #
 # Usage:
-#   PRISMA_AIRS_API_KEY=<key> scripts/setup-secrets.sh
+#   PANW_AI_SEC_API_KEY=<key> scripts/setup-secrets.sh
 #
 # Idempotent: skips creation if secret already exists.
 ###############################################################################
@@ -13,8 +13,8 @@ set -euo pipefail
 REGION="${AWS_REGION:-us-west-2}"
 SECRET_NAME="recipe-agent/prisma-airs-api-key"
 
-if [[ -z "${PRISMA_AIRS_API_KEY:-}" ]]; then
-  echo "ERROR: PRISMA_AIRS_API_KEY env var required" >&2
+if [[ -z "${PANW_AI_SEC_API_KEY:-}" ]]; then
+  echo "ERROR: PANW_AI_SEC_API_KEY env var required" >&2
   exit 1
 fi
 
@@ -24,13 +24,13 @@ if aws secretsmanager describe-secret --secret-id "${SECRET_NAME}" --region "${R
   echo "    Secret already exists. Updating value..."
   aws secretsmanager put-secret-value \
     --secret-id "${SECRET_NAME}" \
-    --secret-string "${PRISMA_AIRS_API_KEY}" \
+    --secret-string "${PANW_AI_SEC_API_KEY}" \
     --region "${REGION}"
   echo "    Updated."
 else
   aws secretsmanager create-secret \
     --name "${SECRET_NAME}" \
-    --secret-string "${PRISMA_AIRS_API_KEY}" \
+    --secret-string "${PANW_AI_SEC_API_KEY}" \
     --description "Prisma AIRS API key for recipe-extraction-agent" \
     --region "${REGION}"
   echo "    Created."
