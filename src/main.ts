@@ -1,8 +1,7 @@
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
-import { app } from "./app.js";
 
 async function bootstrap() {
-  if (!process.env.PRISMA_AIRS_API_KEY) {
+  if (!process.env.PANW_AI_SEC_API_KEY) {
     try {
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-west-2",
@@ -13,12 +12,15 @@ async function bootstrap() {
         }),
       );
       if (secret.SecretString) {
-        process.env.PRISMA_AIRS_API_KEY = secret.SecretString;
+        process.env.PANW_AI_SEC_API_KEY = secret.SecretString;
       }
     } catch {
-      console.warn("Secrets Manager unavailable, using env var for PRISMA_AIRS_API_KEY");
+      console.warn("Secrets Manager unavailable, using env var for PANW_AI_SEC_API_KEY");
     }
   }
+
+  // Dynamic import so app.ts module-level init() sees the env var
+  const { app } = await import("./app.js");
   app.run();
 }
 

@@ -29,8 +29,8 @@ set -euo pipefail
 REGION="${AWS_REGION:-us-west-2}"
 SECRET_NAME="recipe-agent/prisma-airs-api-key"
 
-if [[ -z "${PRISMA_AIRS_API_KEY:-}" ]]; then
-  echo "ERROR: PRISMA_AIRS_API_KEY env var required" >&2
+if [[ -z "${PANW_AI_SEC_API_KEY:-}" ]]; then
+  echo "ERROR: PANW_AI_SEC_API_KEY env var required" >&2
   exit 1
 fi
 
@@ -41,13 +41,13 @@ if aws secretsmanager describe-secret \
   echo "    Secret already exists. Updating value..."
   aws secretsmanager put-secret-value \
     --secret-id "${SECRET_NAME}" \
-    --secret-string "${PRISMA_AIRS_API_KEY}" \
+    --secret-string "${PANW_AI_SEC_API_KEY}" \
     --region "${REGION}"
   echo "    Updated."
 else
   aws secretsmanager create-secret \
     --name "${SECRET_NAME}" \
-    --secret-string "${PRISMA_AIRS_API_KEY}" \
+    --secret-string "${PANW_AI_SEC_API_KEY}" \
     --description "Prisma AIRS API key for recipe-extraction-agent" \
     --region "${REGION}"
   echo "    Created."
@@ -57,7 +57,7 @@ fi
 **Usage:**
 
 ```bash
-PRISMA_AIRS_API_KEY=your-key-here scripts/setup-secrets.sh
+PANW_AI_SEC_API_KEY=your-key-here scripts/setup-secrets.sh
 ```
 
 The script is idempotent — if the secret already exists, it updates the value.
@@ -224,9 +224,8 @@ Complete list of environment variables used across the project:
 |---|---|---|---|
 | `AWS_REGION` | `.env` / runtime env | No (defaults to `us-west-2`) | AWS region for all service calls |
 | `AWS_ACCOUNT_ID` | `.env` / runtime env | No | Used for agent ARN in AIRS metadata |
-| `PRISMA_AIRS_API_KEY` | Secrets Manager | No | AIRS API key (fetched at bootstrap) |
+| `PANW_AI_SEC_API_KEY` | Secrets Manager | No | AIRS API key (fetched at bootstrap, used by `@cdot65/prisma-airs-sdk`) |
 | `PRISMA_AIRS_PROFILE_NAME` | Runtime env var | No | AIRS security profile name |
-| `PRISMA_AIRS_API_URL` | `.env` | No | Override AIRS API endpoint |
 | `BEDROCK_AGENT_ID` | Runtime env var | No | AgentCore runtime ID (enables CloudWatch + AIRS metadata) |
 | `BEDROCK_AGENT_VERSION` | Runtime env var | No | Agent version (defaults to "1") |
 | `AGENTCORE_RUNTIME_ID` | `.env` / CI secret | For `--update` | Runtime ID for update deploys |

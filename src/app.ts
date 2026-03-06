@@ -1,7 +1,13 @@
+import {
+  AISecSDKException,
+  Content,
+  init,
+  Scanner,
+  type ScanResponse,
+} from "@cdot65/prisma-airs-sdk";
 import { Agent, type AgentResult, BedrockModel } from "@strands-agents/sdk";
 import { BedrockAgentCoreApp } from "bedrock-agentcore/runtime";
 import { z } from "zod";
-import { PrismaAIRSClient } from "./lib/airs-api-client.js";
 import { createCloudWatchStream, createTeeStream } from "./lib/cloudwatch-stream.js";
 import { type Recipe, RecipeSchema } from "./schemas/recipe.js";
 import { fetchUrlTool } from "./tools/fetch-url.js";
@@ -81,7 +87,58 @@ export function extractJson(text: string): unknown {
   throw new Error("Could not extract JSON from agent response");
 }
 
-const airsClient = new PrismaAIRSClient();
+// AIRS SDK initialization
+const airsApiKey = process.env.PANW_AI_SEC_API_KEY || "";
+const airsProfileName = process.env.PRISMA_AIRS_PROFILE_NAME || "";
+export const airsEnabled = Boolean(airsApiKey && airsProfileName);
+
+if (airsEnabled) {
+  init({ apiKey: airsApiKey });
+}
+
+const scanner = airsEnabled ? new Scanner() : null;
+
+function buildMetadata() {
+  const agentId = process.env.BEDROCK_AGENT_ID;
+  const region = process.env.AWS_REGION || "us-west-2";
+  const accountId = process.env.AWS_ACCOUNT_ID;
+
+  return {
+    app_name: "recipe-extraction-agent",
+    app_user: "anonymous",
+    ai_model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    agent_meta: agentId
+      ? {
+          agent_id: agentId,
+          agent_version: process.env.BEDROCK_AGENT_VERSION || "1",
+          agent_arn: accountId
+            ? `arn:aws:bedrock:${region}:${accountId}:agent/${agentId}`
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
+function scanResultFields(scan: ScanResponse) {
+  return {
+    action: scan.action,
+    category: scan.category,
+    scanId: scan.scan_id,
+    reportId: scan.report_id,
+    profileId: scan.profile_id,
+    profileName: scan.profile_name,
+    trId: scan.tr_id,
+    promptDetected: scan.prompt_detected,
+    responseDetected: scan.response_detected,
+  };
+}
+
+function scanErrorFields(err: unknown) {
+  if (err instanceof AISecSDKException) {
+    return { err: String(err), errorType: err.errorType };
+  }
+  return { err: String(err) };
+}
 
 export const processHandler = async (
   request: { url: string },
@@ -98,16 +155,33 @@ export const processHandler = async (
   context.log.info({ url: request.url, sessionId: context.sessionId }, "Extracting recipe");
 
   const prompt = `Extract the recipe from this URL: ${request.url}`;
-  const scanMeta = { sessionId: context.sessionId };
+
+  context.log.info({ airsEnabled, airsProfileName: airsProfileName || null }, "AIRS SDK status");
 
   // Pre-scan: check inbound prompt for threats
-  if (airsClient.isEnabled()) {
-    context.log.info({}, "AIRS prompt scan starting");
-    const promptScan = await airsClient.scanPrompt(prompt, scanMeta);
+  if (scanner) {
+    const metadata = buildMetadata();
     context.log.info(
-      { action: promptScan?.action, scanId: promptScan?.scan_id, durationMs: Date.now() - start },
-      "AIRS prompt scan complete",
+      { promptLength: prompt.length, profileName: airsProfileName, metadata },
+      "AIRS prompt scan starting",
     );
+    let promptScan: ScanResponse | undefined;
+    try {
+      promptScan = await scanner.syncScan(
+        { profile_name: airsProfileName },
+        new Content({ prompt }),
+        { sessionId: context.sessionId, metadata },
+      );
+      context.log.info(
+        { ...scanResultFields(promptScan), durationMs: Date.now() - start },
+        "AIRS prompt scan complete",
+      );
+    } catch (err) {
+      context.log.error(
+        { ...scanErrorFields(err), durationMs: Date.now() - start },
+        "AIRS prompt scan failed, proceeding unscanned",
+      );
+    }
 
     if (promptScan?.action === "block") {
       context.log.warn(
@@ -164,13 +238,36 @@ export const processHandler = async (
   );
 
   // Post-scan: check outbound response for threats
-  if (airsClient.isEnabled()) {
-    context.log.info({}, "AIRS response scan starting");
-    const responseScan = await airsClient.scanResponse(JSON.stringify(recipe), prompt, scanMeta);
+  if (scanner) {
+    const responseBody = JSON.stringify(recipe);
+    const metadata = buildMetadata();
     context.log.info(
-      { action: responseScan?.action, scanId: responseScan?.scan_id },
-      "AIRS response scan complete",
+      {
+        promptLength: prompt.length,
+        responseLength: responseBody.length,
+        profileName: airsProfileName,
+        metadata,
+      },
+      "AIRS response scan starting",
     );
+    let responseScan: ScanResponse | undefined;
+    const responseScanStart = Date.now();
+    try {
+      responseScan = await scanner.syncScan(
+        { profile_name: airsProfileName },
+        new Content({ prompt, response: responseBody }),
+        { sessionId: context.sessionId, metadata },
+      );
+      context.log.info(
+        { ...scanResultFields(responseScan), durationMs: Date.now() - responseScanStart },
+        "AIRS response scan complete",
+      );
+    } catch (err) {
+      context.log.error(
+        { ...scanErrorFields(err), durationMs: Date.now() - responseScanStart },
+        "AIRS response scan failed, proceeding unscanned",
+      );
+    }
 
     if (responseScan?.action === "block") {
       context.log.warn(
