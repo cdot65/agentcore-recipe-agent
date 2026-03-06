@@ -92,7 +92,7 @@ describe("processHandler", () => {
 
     const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
 
-    expect(result).toEqual(validRecipe);
+    expect(JSON.parse(result)).toEqual(validRecipe);
   });
 
   it("handles markdown-wrapped JSON response", async () => {
@@ -102,7 +102,7 @@ describe("processHandler", () => {
 
     const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
 
-    expect(result).toEqual(validRecipe);
+    expect(JSON.parse(result)).toEqual(validRecipe);
   });
 
   it("handles JSON with surrounding text", async () => {
@@ -112,7 +112,7 @@ describe("processHandler", () => {
 
     const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
 
-    expect(result).toEqual(validRecipe);
+    expect(JSON.parse(result)).toEqual(validRecipe);
   });
 
   it("returns error object when agent invocation fails", async () => {
@@ -121,10 +121,9 @@ describe("processHandler", () => {
     const ctx = mockContext();
     const result = await processHandler({ url: "https://example.com/recipe" }, ctx);
 
-    expect(result).toEqual({
-      error: "agent_error",
-      message: expect.stringContaining("Model timeout"),
-    });
+    const parsed = JSON.parse(result);
+    expect(parsed.error).toBe("agent_error");
+    expect(parsed.message).toContain("Model timeout");
     expect(ctx.log.error).toHaveBeenCalledWith(
       expect.objectContaining({ error: "Error: Model timeout" }),
       "Agent invocation failed",
@@ -136,10 +135,9 @@ describe("processHandler", () => {
 
     const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
 
-    expect(result).toEqual({
-      error: "parse_error",
-      message: expect.stringContaining("Could not extract JSON"),
-    });
+    const parsed = JSON.parse(result);
+    expect(parsed.error).toBe("parse_error");
+    expect(parsed.message).toContain("Could not extract JSON");
   });
 
   it("returns error object when JSON fails schema validation", async () => {
@@ -148,10 +146,9 @@ describe("processHandler", () => {
 
     const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
 
-    expect(result).toEqual({
-      error: "parse_error",
-      message: expect.stringContaining("Failed to parse recipe"),
-    });
+    const parsed = JSON.parse(result);
+    expect(parsed.error).toBe("parse_error");
+    expect(parsed.message).toContain("Failed to parse recipe");
   });
 
   it("calls agent.invoke with correct prompt", async () => {
@@ -202,7 +199,7 @@ describe("processHandler", () => {
 
     const result = await processHandler({ url: "https://example.com/recipe" }, mockContext());
 
-    expect(result).toEqual(fullRecipe);
+    expect(JSON.parse(result)).toEqual(fullRecipe);
   });
 
   describe("AIRS integration", () => {
@@ -320,7 +317,7 @@ describe("processHandler", () => {
       const { processHandler: handler } = await import("../../src/app.js");
       const result = await handler({ url: "https://example.com/recipe" }, mockContext());
 
-      expect(result).toEqual({
+      expect(JSON.parse(result)).toEqual({
         error: "blocked",
         message: "Request blocked by Prisma AIRS security.",
         category: "injection",
@@ -337,7 +334,7 @@ describe("processHandler", () => {
       const ctx = mockContext();
       const result = await handler({ url: "https://example.com/recipe" }, ctx);
 
-      expect(result).toEqual(validRecipe);
+      expect(JSON.parse(result)).toEqual(validRecipe);
       expect(ctx.log.error).toHaveBeenCalledWith(
         expect.objectContaining({ err: expect.stringContaining("AIRS timeout") }),
         "AIRS prompt scan failed, proceeding unscanned",
@@ -392,7 +389,7 @@ describe("processHandler", () => {
       const ctx = mockContext();
       const result = await handler({ url: "https://example.com/recipe" }, ctx);
 
-      expect(result).toEqual(validRecipe);
+      expect(JSON.parse(result)).toEqual(validRecipe);
       expect(ctx.log.error).toHaveBeenCalledWith(
         expect.objectContaining({ err: expect.stringContaining("AIRS timeout") }),
         "AIRS response scan failed, proceeding unscanned",
@@ -437,7 +434,7 @@ describe("processHandler", () => {
       const { processHandler: handler } = await import("../../src/app.js");
       const result = await handler({ url: "https://example.com/recipe" }, mockContext());
 
-      expect(result).toEqual({
+      expect(JSON.parse(result)).toEqual({
         error: "blocked",
         message: "Response blocked by Prisma AIRS security.",
         category: "dlp",
@@ -455,7 +452,7 @@ describe("processHandler", () => {
         mockContext(),
       );
 
-      expect(result).toEqual(validRecipe);
+      expect(JSON.parse(result)).toEqual(validRecipe);
       expect(mockInvoke).toHaveBeenCalledWith(
         "Extract the recipe from this URL: https://example.com/recipe",
       );
@@ -469,7 +466,7 @@ describe("processHandler", () => {
         mockContext(),
       );
 
-      expect(result).toEqual(validRecipe);
+      expect(JSON.parse(result)).toEqual(validRecipe);
       expect(mockInvoke).toHaveBeenCalledWith(
         "Extract the recipe from this URL: https://example.com/a",
       );
@@ -478,19 +475,17 @@ describe("processHandler", () => {
     it("returns error when prompt has no URL", async () => {
       const result = await processHandler({ prompt: "make me a recipe for pasta" }, mockContext());
 
-      expect(result).toEqual({
-        error: "bad_request",
-        message: expect.stringContaining("No URL found"),
-      });
+      const parsed = JSON.parse(result);
+      expect(parsed.error).toBe("bad_request");
+      expect(parsed.message).toContain("No URL found");
     });
 
     it("returns error when neither url nor prompt provided", async () => {
       const result = await processHandler({}, mockContext());
 
-      expect(result).toEqual({
-        error: "bad_request",
-        message: expect.stringContaining("No URL found"),
-      });
+      const parsed = JSON.parse(result);
+      expect(parsed.error).toBe("bad_request");
+      expect(parsed.message).toContain("No URL found");
     });
   });
 
