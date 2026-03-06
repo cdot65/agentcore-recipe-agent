@@ -55,6 +55,13 @@ export const agent = new Agent({
   printer: false,
 });
 
+const URL_REGEX = /https?:\/\/[^\s"'<>]+/;
+
+export function extractUrl(text: string): string | null {
+  const match = text.match(URL_REGEX);
+  return match ? match[0] : null;
+}
+
 export function extractJson(text: string): unknown {
   // Try direct parse first
   try {
@@ -141,7 +148,7 @@ function scanErrorFields(err: unknown) {
 }
 
 export const processHandler = async (
-  request: { url: string },
+  request: { url?: string; prompt?: string },
   context: {
     sessionId: string;
     log: {
@@ -152,9 +159,21 @@ export const processHandler = async (
   },
 ) => {
   const start = Date.now();
-  context.log.info({ url: request.url, sessionId: context.sessionId }, "Extracting recipe");
 
-  const prompt = `Extract the recipe from this URL: ${request.url}`;
+  // Accept {"url": "..."} or {"prompt": "natural language with URL"}
+  let url = request.url;
+  if (!url && request.prompt) {
+    url = extractUrl(request.prompt) ?? undefined;
+  }
+  if (!url) {
+    throw new Error(
+      'No URL found in request. Provide {"url": "..."} or a prompt containing a URL.',
+    );
+  }
+
+  context.log.info({ url, sessionId: context.sessionId }, "Extracting recipe");
+
+  const prompt = `Extract the recipe from this URL: ${url}`;
 
   context.log.info({ airsEnabled, airsProfileName: airsProfileName || null }, "AIRS SDK status");
 
@@ -302,7 +321,8 @@ export const app = new BedrockAgentCoreApp({
   config: { logging: { options: { stream: logStream } } },
   invocationHandler: {
     requestSchema: z.object({
-      url: z.string().url().describe("URL of the recipe page to extract"),
+      url: z.string().url().describe("URL of the recipe page to extract").optional(),
+      prompt: z.string().describe("Natural language prompt containing a recipe URL").optional(),
     }),
     process: processHandler,
   },

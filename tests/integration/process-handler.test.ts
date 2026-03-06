@@ -438,6 +438,46 @@ describe("processHandler", () => {
     });
   });
 
+  describe("prompt-based input (LiteLLM compatibility)", () => {
+    it("extracts URL from prompt field", async () => {
+      mockInvoke.mockResolvedValueOnce(mockAgentResult(JSON.stringify(validRecipe)));
+
+      const result = await processHandler(
+        { prompt: "Extract the recipe from https://example.com/recipe" },
+        mockContext(),
+      );
+
+      expect(result).toEqual(validRecipe);
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "Extract the recipe from this URL: https://example.com/recipe",
+      );
+    });
+
+    it("prefers url field over prompt field", async () => {
+      mockInvoke.mockResolvedValueOnce(mockAgentResult(JSON.stringify(validRecipe)));
+
+      const result = await processHandler(
+        { url: "https://example.com/a", prompt: "get https://example.com/b" },
+        mockContext(),
+      );
+
+      expect(result).toEqual(validRecipe);
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "Extract the recipe from this URL: https://example.com/a",
+      );
+    });
+
+    it("throws when prompt has no URL", async () => {
+      await expect(
+        processHandler({ prompt: "make me a recipe for pasta" }, mockContext()),
+      ).rejects.toThrow("No URL found in request");
+    });
+
+    it("throws when neither url nor prompt provided", async () => {
+      await expect(processHandler({}, mockContext())).rejects.toThrow("No URL found in request");
+    });
+  });
+
   it("skips AIRS scans when disabled", async () => {
     mockInvoke.mockResolvedValueOnce(mockAgentResult(JSON.stringify(validRecipe)));
 
