@@ -1,0 +1,43 @@
+{
+  "name": "recipe-extraction-agent",
+  "version": "0.1.0",
+  "description": "TypeScript agent that extracts structured recipe data from URLs using Bedrock AgentCore",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx --env-file=.env src/main.ts",
+    "start": "node --env-file=.env dist/main.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format .",
+    "format:fix": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "prepare": "git config core.hooksPath .githooks",
+    "test:local": "npm run dev & sleep 3 && curl -s http://localhost:8080/ping && curl -s --max-time 120 -X POST http://localhost:8080/invocations -H 'Content-Type: application/json' -H 'x-amzn-bedrock-agentcore-runtime-session-id: test-session-1' -d '{\"url\": \"https://pinchofyum.com/chicken-wontons-in-spicy-chili-sauce\"}' | jq . ; kill %1 || true"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1002.0",
+    "@aws-sdk/client-secrets-manager": "^3.998.0",
+    "@cdot65/prisma-airs-sdk": "^0.2.0",
+    "@strands-agents/sdk": "^0.4.0",
+    "bedrock-agentcore": "^0.2.0",
+    "linkedom": "^0.18.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  }
+}

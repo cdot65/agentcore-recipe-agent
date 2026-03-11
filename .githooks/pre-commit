@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> typecheck"
+npm run typecheck
+
+echo "==> lint + format"
+npm run check
+
+echo "==> test"
+npm test
