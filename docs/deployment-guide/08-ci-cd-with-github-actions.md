@@ -1,8 +1,5 @@
 # Part 8: CI/CD with GitHub Actions
 
-[<- Back to Index](./README.md) | [Previous: Deploying](./07-deploying-to-agentcore.md) | [Next: Teardown ->](./09-teardown.md)
-
----
 
 ## Overview
 
@@ -366,6 +363,3 @@ graph LR
 
 Both CI and Deploy run in parallel on push to main. CI validates code quality; Deploy builds and ships to AgentCore.
 
----
-
-[Next: Teardown ->](./09-teardown.md)

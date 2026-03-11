@@ -1,8 +1,5 @@
 # Part 4: Observability — CloudWatch Logs
 
-[<- Back to Index](./README.md) | [Previous: Security](./03-security-with-prisma-airs.md) | [Next: Docker Build ->](./05-docker-and-container-build.md)
-
----
 
 ## Why Custom Log Shipping?
 
@@ -228,6 +225,3 @@ Each log line is a Pino JSON object with fields like:
 }
 ```
 
----
-
-[Next: Docker & Container Build ->](./05-docker-and-container-build.md)

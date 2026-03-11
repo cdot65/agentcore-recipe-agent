@@ -1,8 +1,5 @@
 # Part 5: Docker & Container Build
 
-[<- Back to Index](./README.md) | [Previous: Observability](./04-observability-cloudwatch-logs.md) | [Next: AWS Infrastructure ->](./06-aws-infrastructure-setup.md)
-
----
 
 ## Why ARM64?
 
@@ -139,6 +136,3 @@ The multi-stage build produces a lean production image:
 
 The biggest contributors to image size are the AWS SDK packages (`@aws-sdk/client-*`). These are tree-shaken at the module level but still add significant weight.
 
----
-
-[Next: AWS Infrastructure Setup ->](./06-aws-infrastructure-setup.md)

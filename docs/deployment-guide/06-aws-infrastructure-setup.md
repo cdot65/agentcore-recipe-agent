@@ -1,8 +1,5 @@
 # Part 6: AWS Infrastructure Setup
 
-[<- Back to Index](./README.md) | [Previous: Docker Build](./05-docker-and-container-build.md) | [Next: Deploying to AgentCore ->](./07-deploying-to-agentcore.md)
-
----
 
 ## Resource Overview
 
@@ -230,6 +227,3 @@ Complete list of environment variables used across the project:
 | `BEDROCK_AGENT_VERSION` | Runtime env var | No | Agent version (defaults to "1") |
 | `AGENTCORE_RUNTIME_ID` | `.env` / CI secret | For `--update` | Runtime ID for update deploys |
 
----
-
-[Next: Deploying to AgentCore ->](./07-deploying-to-agentcore.md)

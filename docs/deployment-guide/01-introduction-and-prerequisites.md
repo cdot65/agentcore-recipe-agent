@@ -1,8 +1,5 @@
 # Part 1: Introduction & Prerequisites
 
-[<- Back to Index](./README.md) | [Next: Agent Architecture ->](./02-agent-architecture-deep-dive.md)
-
----
 
 ## What is an AI Agent?
 
@@ -245,6 +242,3 @@ npm run typecheck     # TypeScript type checking
 npm run check         # Biome lint + format
 ```
 
----
-
-[Next: Agent Architecture Deep Dive ->](./02-agent-architecture-deep-dive.md)

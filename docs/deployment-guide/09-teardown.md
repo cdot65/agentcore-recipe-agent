@@ -1,8 +1,5 @@
 # Part 9: Teardown
 
-[<- Back to Index](./README.md) | [Previous: CI/CD](./08-ci-cd-with-github-actions.md)
-
----
 
 To fully remove all AWS resources created by this project, run the following commands in order.
 
@@ -126,6 +123,3 @@ aws logs describe-log-groups \
   --region "${REGION}"
 ```
 
----
-
-[<- Back to Index](./README.md)

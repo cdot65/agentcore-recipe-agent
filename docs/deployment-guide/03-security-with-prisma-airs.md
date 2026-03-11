@@ -1,8 +1,5 @@
 # Part 3: Security with Prisma AIRS
 
-[<- Back to Index](./README.md) | [Previous: Architecture](./02-agent-architecture-deep-dive.md) | [Next: Observability ->](./04-observability-cloudwatch-logs.md)
-
----
 
 ## Why AI Runtime Security?
 
@@ -326,6 +323,3 @@ The dynamic import is critical: `app.ts` runs `init()` at module load time, so t
 
 All are optional. If `PANW_AI_SEC_API_KEY` and `PRISMA_AIRS_PROFILE_NAME` are not set, AIRS is completely disabled and the agent handles requests without scanning.
 
----
-
-[Next: Observability: CloudWatch Logs ->](./04-observability-cloudwatch-logs.md)

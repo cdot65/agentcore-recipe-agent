@@ -1,8 +1,5 @@
 # Part 7: Deploying to AgentCore
 
-[<- Back to Index](./README.md) | [Previous: Infrastructure](./06-aws-infrastructure-setup.md) | [Next: CI/CD ->](./08-ci-cd-with-github-actions.md)
-
----
 
 ## Deploy Script Overview
 
@@ -235,6 +232,3 @@ aws logs tail "/aws/bedrock/agentcore/recipe-extraction-agent" \
   --region us-west-2 --follow
 ```
 
----
-
-[Next: CI/CD with GitHub Actions ->](./08-ci-cd-with-github-actions.md)

@@ -1,8 +1,5 @@
 # Part 2: Agent Architecture Deep Dive
 
-[<- Back to Index](./README.md) | [Previous: Introduction](./01-introduction-and-prerequisites.md) | [Next: Security with Prisma AIRS ->](./03-security-with-prisma-airs.md)
-
----
 
 This part walks through every layer of the agent — from the entry point through the LLM tool-use loop to response validation.
 
@@ -435,6 +432,3 @@ sequenceDiagram
     App-->>-C: 200 OK — Recipe JSON
 ```
 
----
-
-[Next: Security with Prisma AIRS ->](./03-security-with-prisma-airs.md)
