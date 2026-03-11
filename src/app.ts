@@ -25,7 +25,7 @@ export const SYSTEM_PROMPT = `You are a recipe extraction agent. When given a UR
   ],
   "preparationSteps": ["string"],
   "cookingSteps": ["string"],
-  "notes": {
+  "notes": {  // optional — omit entirely if no metadata available
     "servings": "string or omit",
     "cookTime": "string or omit",
     "prepTime": "string or omit",
