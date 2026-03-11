@@ -187,6 +187,7 @@ export const processHandler = async (request, context) => {
         { sessionId: context.sessionId, metadata },
       );
     } catch (err) {
+      // Simplified — actual code includes scanErrorFields(err) and durationMs
       context.log.error({ err }, "AIRS prompt scan failed, proceeding unscanned");
     }
 
@@ -212,6 +213,7 @@ export const processHandler = async (request, context) => {
         { sessionId: context.sessionId, metadata: buildMetadata() },
       );
     } catch (err) {
+      // Simplified — actual code includes scanErrorFields(err) and durationMs
       context.log.error({ err }, "AIRS response scan failed, proceeding unscanned");
     }
 

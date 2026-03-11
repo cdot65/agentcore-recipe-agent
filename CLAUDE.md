@@ -11,7 +11,7 @@ TypeScript agent built on the [bedrock-agentcore SDK](https://github.com/aws/bed
 ```
 src/
   app.ts          Agent logic, extractJson, extractUrl, processHandler, AIRS scanning
-  main.ts         Entry point (imports app, calls app.run())
+  main.ts         Bootstrap (Secrets Manager fetch) → dynamic import app → app.run()
   lib/
     cloudwatch-stream.ts  CloudWatch Logs streaming (createCloudWatchStream, createTeeStream)
   schemas/
@@ -21,11 +21,17 @@ src/
 tests/
   unit/           Schema, extractJson, fetch-url, cloudwatch-stream tests
   integration/    processHandler tests (mocked Agent + BedrockAgentCoreApp)
+scripts/
+  deploy.sh             First deploy + update AgentCore runtime
+  setup-github-iam.sh   Create IAM role for GitHub Actions OIDC
+docs/
+  deployment-guide/     9-part MkDocs deployment guide (Parts 01–09)
 .githooks/
   pre-commit      Runs typecheck → lint → test
 .github/
   workflows/
     ci.yml        GitHub Actions CI on PR/push to main
+    deploy.yml    Build → ECR push → AgentCore update on push to main
 ```
 
 ## Architecture Pattern
