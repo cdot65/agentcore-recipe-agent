@@ -21,11 +21,12 @@ The entry point handles one concern: fetching secrets before the server starts.
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 
 async function bootstrap() {
+  const region = process.env.AWS_REGION || "us-west-2";
+  let secretSource = "env";
+
   if (!process.env.PANW_AI_SEC_API_KEY) {
     try {
-      const sm = new SecretsManagerClient({
-        region: process.env.AWS_REGION || "us-west-2",
-      });
+      const sm = new SecretsManagerClient({ region });
       const secret = await sm.send(
         new GetSecretValueCommand({
           SecretId: "recipe-agent/prisma-airs-api-key",
@@ -33,11 +34,28 @@ async function bootstrap() {
       );
       if (secret.SecretString) {
         process.env.PANW_AI_SEC_API_KEY = secret.SecretString;
+        secretSource = "secrets-manager";
       }
-    } catch {
+    } catch (err) {
       console.warn("Secrets Manager unavailable, using env var for PANW_AI_SEC_API_KEY");
+      console.warn("  error:", String(err));
     }
   }
+
+  const apiKey = process.env.PANW_AI_SEC_API_KEY || "";
+  console.log(
+    JSON.stringify({
+      msg: "bootstrap",
+      secretSource,
+      apiKeySet: Boolean(apiKey),
+      apiKeyLength: apiKey.length,
+      apiKeyPrefix: apiKey.slice(0, 8) || null,
+      profileName: process.env.PRISMA_AIRS_PROFILE_NAME || null,
+      region,
+      bedrockAgentId: process.env.BEDROCK_AGENT_ID || null,
+      awsAccountId: process.env.AWS_ACCOUNT_ID || null,
+    }),
+  );
 
   // Dynamic import so app.ts module-level init() sees the env var
   const { app } = await import("./app.js");
@@ -49,18 +67,19 @@ bootstrap();
 
 **Key points:**
 - Only fetches from Secrets Manager if the env var isn't already set (local dev uses `.env`)
-- Fails silently — if Secrets Manager is unavailable, the agent runs without AIRS
+- Tracks `secretSource` (`"env"` vs `"secrets-manager"`) and emits a structured JSON bootstrap log with key diagnostics (key length/prefix, profile name, region, agent ID)
+- Fails gracefully — if Secrets Manager is unavailable, the agent runs without AIRS (logs warning + error)
 - Uses a **dynamic import** for `app.ts` — the `@cdot65/prisma-airs-sdk` `init()` call runs at module load time, so the API key must be in `process.env` *before* the import
 - Calls `app.run()` to start the Fastify server on port 8080
 
 ### `src/app.ts` — Agent + Server
 
-This file exports four things: `agent`, `extractJson()`, `processHandler`, and `app`. The separation makes every piece independently testable.
+This file exports `SYSTEM_PROMPT`, `agent`, `extractUrl()`, `extractJson()`, `airsEnabled`, `processHandler`, and `app`. The separation makes every piece independently testable.
 
 ## Model Configuration
 
 ```typescript
-// src/app.ts, lines 34-39
+// src/app.ts
 const model = new BedrockModel({
   modelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
   region: "us-west-2",
@@ -81,7 +100,7 @@ The model ID uses a **cross-region inference profile** prefix (`us.`) which lets
 ## Agent + System Prompt
 
 ```typescript
-// src/app.ts, lines 41-46
+// src/app.ts
 export const agent = new Agent({
   model,
   tools: [fetchUrlTool],
@@ -95,7 +114,7 @@ The `printer: false` setting disables the SDK's built-in console output — in a
 The system prompt (defined at the top of `src/app.ts`) tells the LLM exactly what schema to produce:
 
 ```typescript
-// src/app.ts, lines 8-32
+// src/app.ts
 export const SYSTEM_PROMPT = `You are a recipe extraction agent. When given a URL:
 
 1. Use the fetch_url tool to retrieve the webpage content.
@@ -121,8 +140,8 @@ Rules:
 - quantity must be a number (convert fractions: ½=0.5, ¼=0.25, ⅓=0.33, ¾=0.75, etc.)
 - unit is empty string "" if the ingredient is unitless (e.g. "2 eggs" → unit: "")
 - description is empty string "" if no preparation notes exist
-- Separate preparation steps (no heat) from cooking steps (involving heat)
-- If JSON-LD data is available, prefer it for accuracy but verify against the page text
+- Separate preparation steps (no heat: chopping, mixing, marinating) from cooking steps (involving heat or the actual cook)
+- If JSON-LD data is available, prefer it for accuracy but still verify against the page text
 - Return ONLY the JSON object, nothing else`;
 ```
 
@@ -200,7 +219,7 @@ The tool returns both `text` (for the LLM to read) and `jsonLd` (structured data
 LLMs don't always return clean JSON. They might wrap it in markdown code blocks, add explanation text, or include trailing commas. `extractJson()` handles this with a three-step fallback chain:
 
 ```typescript
-// src/app.ts, lines 48-73
+// src/app.ts
 export function extractJson(text: string): unknown {
   // 1. Try direct parse
   try {
@@ -265,6 +284,22 @@ export type Recipe = z.infer<typeof RecipeSchema>;
 
 If the LLM output doesn't match the schema, `RecipeSchema.parse()` throws with detailed error messages — this acts as a safety net against hallucinated or malformed responses.
 
+## `extractUrl()` — Parsing URLs from Plain Text
+
+The handler accepts both `{"url": "..."}` and `{"prompt": "natural language with URL"}`. The `extractUrl()` function extracts a URL from freeform text:
+
+```typescript
+// src/app.ts
+const URL_REGEX = /https?:\/\/[^\s"'<>]+/;
+
+export function extractUrl(text: string): string | null {
+  const match = text.match(URL_REGEX);
+  return match ? match[0] : null;
+}
+```
+
+This enables compatibility with clients that send plain text prompts (e.g., LiteLLM) instead of structured JSON.
+
 ## `processHandler` — The Request Flow
 
 The handler ties everything together:
@@ -272,11 +307,23 @@ The handler ties everything together:
 ```typescript
 // src/app.ts (simplified)
 export const processHandler = async (
-  request: { url: string },
+  request: { url?: string; prompt?: string },
   context: { sessionId: string; log: { info; warn; error } },
 ) => {
-  const prompt = `Extract the recipe from this URL: ${request.url}`;
-  context.log.info({ url: request.url, sessionId: context.sessionId }, "Extracting recipe");
+  // Accept {"url": "..."} or {"prompt": "natural language with URL"}
+  let url = request.url;
+  if (!url && request.prompt) {
+    url = extractUrl(request.prompt) ?? undefined;
+  }
+  if (!url) {
+    return {
+      error: "bad_request",
+      message: 'No URL found in request. Provide {"url": "..."} or a prompt containing a URL.',
+    };
+  }
+
+  const prompt = `Extract the recipe from this URL: ${url}`;
+  context.log.info({ url, sessionId: context.sessionId }, "Extracting recipe");
 
   // 1. Pre-scan: check inbound prompt (uses @cdot65/prisma-airs-sdk Scanner)
   if (scanner) {
@@ -331,19 +378,20 @@ The AIRS integration uses the `@cdot65/prisma-airs-sdk` package — see [Part 3:
 Finally, the app is created and exported:
 
 ```typescript
-// src/app.ts, lines 146-155
+// src/app.ts
 export const app = new BedrockAgentCoreApp({
   config: { logging: { options: { stream: logStream } } },
   invocationHandler: {
     requestSchema: z.object({
-      url: z.string().url().describe("URL of the recipe page to extract"),
+      url: z.string().url().describe("URL of the recipe page to extract").optional(),
+      prompt: z.string().describe("Natural language prompt containing a recipe URL").optional(),
     }),
     process: processHandler,
   },
 });
 ```
 
-- `requestSchema` validates incoming POST bodies — rejects anything without a valid URL
+- `requestSchema` validates incoming POST bodies — accepts either a `url` or a `prompt` containing a URL
 - `process` is called for every `/invocations` request
 - `config.logging.options.stream` routes Pino logs to stdout + CloudWatch (see [Part 4](./04-observability-cloudwatch-logs.md))
 
@@ -359,8 +407,8 @@ sequenceDiagram
     participant T as fetch_url Tool
     participant W as Recipe Website
 
-    C->>+App: POST /invocations {"url": "..."}
-    Note over App: Zod validates request
+    C->>+App: POST /invocations {"url": "..."} or {"prompt": "..."}
+    Note over App: Zod validates request, extractUrl() if prompt
 
     App->>+AIRS: scanPrompt(prompt)
     AIRS-->>-App: {action: "allow"}

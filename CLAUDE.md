@@ -10,14 +10,16 @@ TypeScript agent built on the [bedrock-agentcore SDK](https://github.com/aws/bed
 
 ```
 src/
-  app.ts          Agent logic, extractJson, processHandler (all exports)
+  app.ts          Agent logic, extractJson, extractUrl, processHandler, AIRS scanning
   main.ts         Entry point (imports app, calls app.run())
+  lib/
+    cloudwatch-stream.ts  CloudWatch Logs streaming (createCloudWatchStream, createTeeStream)
   schemas/
     recipe.ts     Zod schemas (IngredientSchema, RecipeSchema) + types
   tools/
     fetch-url.ts  fetch_url tool: HTTP fetch, HTML parsing, JSON-LD extraction
 tests/
-  unit/           Schema, extractJson, fetch-url tests
+  unit/           Schema, extractJson, fetch-url, cloudwatch-stream tests
   integration/    processHandler tests (mocked Agent + BedrockAgentCoreApp)
 .githooks/
   pre-commit      Runs typecheck → lint → test
@@ -25,19 +27,6 @@ tests/
   workflows/
     ci.yml        GitHub Actions CI on PR/push to main
 ```
-
-## SDK Overview
-
-Single npm package: `bedrock-agentcore` (requires Node.js 20+)
-
-Import paths:
-- `bedrock-agentcore/runtime` — `BedrockAgentCoreApp`, `RuntimeClient`, `RequestContext`
-- `bedrock-agentcore/identity` — `withAccessToken()`, `withApiKey()` (OAuth2/API key HOFs)
-- `bedrock-agentcore/code-interpreter` — sandboxed code execution
-- `bedrock-agentcore/browser` — cloud browser automation
-- `bedrock-agentcore/browser/playwright` — Playwright integration
-- `bedrock-agentcore/experimental/code-interpreter/strands` — Strands SDK integration
-- `bedrock-agentcore/experimental/browser/strands` — Strands SDK integration
 
 ## Architecture Pattern
 
@@ -52,53 +41,65 @@ Handler types:
   - async function*      → SSE streaming (yield events, auto-closes with event:done)
 ```
 
-This project uses a non-streaming handler that returns a typed Recipe JSON object. The app logic lives in `src/app.ts` (testable exports); `src/main.ts` is the entry point that calls `app.run()`.
+This project uses a non-streaming handler returning a typed Recipe JSON object. Request accepts `{"url": "..."}` or `{"prompt": "natural language with URL"}` (URL extracted via regex).
 
-```typescript
-// src/app.ts — exports agent, extractJson, processHandler, app
-import { Agent, BedrockModel } from '@strands-agents/sdk'
-import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
-import { z } from 'zod'
+App logic lives in `src/app.ts` (testable exports); `src/main.ts` is the thin entry point.
 
-export const app = new BedrockAgentCoreApp({
-  invocationHandler: {
-    requestSchema: z.object({ url: z.string().url() }),
-    process: processHandler,  // exported separately for testing
-  },
-})
+### Request Flow
 
-// src/main.ts — entry point
-import { app } from './app.js'
-app.run()
-```
+1. Parse URL from `request.url` or extract from `request.prompt`
+2. (Optional) AIRS prompt pre-scan — block if flagged
+3. Invoke Strands Agent with `fetch_url` tool → LLM extracts structured recipe
+4. Parse agent response via `extractJson` → validate with `RecipeSchema`
+5. (Optional) AIRS response post-scan — block if flagged
+6. Return typed `Recipe` object
 
 ## Key Dependencies
 
-- `bedrock-agentcore` — runtime server (Fastify on :8080)
+- `bedrock-agentcore` — runtime server (Fastify on :8080), requires Node.js 20+
 - `@strands-agents/sdk` — agent framework (Agent, BedrockModel, tool)
+- `@cdot65/prisma-airs-sdk` — AI security scanning (prompt/response threat detection)
 - `zod` ^4 — request/response schema validation
 - `linkedom` — lightweight HTML parser (~200KB vs jsdom 70MB)
-- `@aws-sdk/client-bedrock-agentcore` — underlying AWS SDK (pulled in transitively)
+
+## SDK Overview
+
+Single npm package: `bedrock-agentcore`
+
+Import paths:
+- `bedrock-agentcore/runtime` — `BedrockAgentCoreApp`, `RuntimeClient`, `RequestContext`
+- `bedrock-agentcore/identity` — `withAccessToken()`, `withApiKey()` (OAuth2/API key HOFs)
+- `bedrock-agentcore/code-interpreter` — sandboxed code execution
+- `bedrock-agentcore/browser` — cloud browser automation
+- `bedrock-agentcore/browser/playwright` — Playwright integration
+
+## Common Commands
+
+```bash
+npm test                          # run all tests
+npm run test:watch                # watch mode
+npx vitest run tests/unit/extract-json.test.ts  # single test file
+npm run test:coverage             # tests + coverage (100% thresholds enforced)
+npm run typecheck                 # tsc --noEmit
+npm run check                     # biome lint + format check
+npm run check:fix                 # auto-fix lint + format
+npm run build                     # tsc → dist/
+npm run dev                       # tsx with .env hot reload
+```
 
 ## Dev Tooling
 
-- `vitest` — test framework (71 tests, 100% coverage enforced via v8 thresholds)
+- `vitest` — test framework, 100% coverage enforced via v8 thresholds (statements/branches/functions/lines)
 - `@biomejs/biome` — linting + formatting (single tool, zero plugins)
 - `typescript` — strict mode, `tsc --noEmit` for type checking
 - Pre-commit hook: `.githooks/pre-commit` runs typecheck → biome check → vitest
 - CI: `.github/workflows/ci.yml` runs same checks on PR/push to main
 
-## Common Commands
+## Environment Variables
 
-```bash
-npm test              # run tests
-npm run test:coverage # tests + coverage report
-npm run typecheck     # tsc --noEmit
-npm run check         # biome lint + format
-npm run check:fix     # auto-fix lint + format
-npm run build         # tsc → dist/
-npm run dev           # tsx src/main.ts (hot reload)
-```
+- `PANW_AI_SEC_API_KEY` + `PRISMA_AIRS_PROFILE_NAME` — enables AIRS security scanning (both required)
+- `AWS_REGION` — defaults to `us-west-2`
+- `BEDROCK_AGENT_ID` — enables CloudWatch log streaming when set
 
 ## Identity SDK
 

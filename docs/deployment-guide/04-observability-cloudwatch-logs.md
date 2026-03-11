@@ -153,7 +153,7 @@ This writes each chunk to all streams in parallel and waits for all to complete 
 The conditional wiring in `src/app.ts`:
 
 ```typescript
-// src/app.ts, lines 139-144
+// src/app.ts
 const LOG_GROUP = "/aws/bedrock/agentcore/recipe-extraction-agent";
 const region = process.env.AWS_REGION || "us-west-2";
 
@@ -165,12 +165,13 @@ const logStream = process.env.BEDROCK_AGENT_ID
 Then passed to the app:
 
 ```typescript
-// src/app.ts, lines 146-155
+// src/app.ts
 export const app = new BedrockAgentCoreApp({
   config: { logging: { options: { stream: logStream } } },
   invocationHandler: {
     requestSchema: z.object({
-      url: z.string().url().describe("URL of the recipe page to extract"),
+      url: z.string().url().describe("URL of the recipe page to extract").optional(),
+      prompt: z.string().describe("Natural language prompt containing a recipe URL").optional(),
     }),
     process: processHandler,
   },

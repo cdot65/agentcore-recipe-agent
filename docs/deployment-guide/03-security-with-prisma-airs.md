@@ -119,7 +119,13 @@ The AIRS integration is wired directly into `src/app.ts` using the SDK.
 
 ```typescript
 // src/app.ts
-import { Content, init, Scanner, type ScanResponse } from "@cdot65/prisma-airs-sdk";
+import {
+  AISecSDKException,
+  Content,
+  init,
+  Scanner,
+  type ScanResponse,
+} from "@cdot65/prisma-airs-sdk";
 
 const airsApiKey = process.env.PANW_AI_SEC_API_KEY || "";
 const airsProfileName = process.env.PRISMA_AIRS_PROFILE_NAME || "";

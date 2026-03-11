@@ -154,7 +154,7 @@ cp .env.example .env
 The `.env.example` file:
 
 ```bash
-# Prisma AIRS AI Runtime Security (uses @cdot65/prisma-airs-sdk)
+# Prisma AIRS AI Runtime Security
 # PANW_AI_SEC_API_KEY is fetched from Secrets Manager in prod.
 # Set here for local dev only.
 PANW_AI_SEC_API_KEY=
@@ -239,7 +239,7 @@ The response (after 5-9 seconds) will be a structured recipe JSON object:
 ### 6. Run the test suite
 
 ```bash
-npm test              # 71 tests
+npm test              # 110 tests
 npm run test:coverage # with coverage report
 npm run typecheck     # TypeScript type checking
 npm run check         # Biome lint + format
