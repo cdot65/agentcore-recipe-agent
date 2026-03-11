@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Document/recipe page -->
+  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+  <polyline points="14 2 14 8 20 8"/>
+  <!-- Extraction lines -->
+  <line x1="8" y1="13" x2="16" y2="13"/>
+  <line x1="8" y1="17" x2="12" y2="17"/>
+  <!-- Sparkle / AI indicator -->
+  <circle cx="17" cy="17" r="0.5" fill="#ffffff" stroke="none"/>
+  <path d="M17 14.5v1m0 3v1m-1.75-1.75h1m3 0h1" stroke-width="1"/>
+</svg>
