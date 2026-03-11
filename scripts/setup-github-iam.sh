@@ -9,7 +9,10 @@ set -euo pipefail
 #   - ECR repository "recipe-extraction-agent" already exists
 #
 # Usage:
-#   scripts/setup-github-iam.sh
+#   AGENTCORE_RUNTIME_ID=<runtime-id> scripts/setup-github-iam.sh
+#
+# Required env vars:
+#   AGENTCORE_RUNTIME_ID    AgentCore runtime ID from first deploy
 ###############################################################################
 
 REGION="${AWS_REGION:-us-west-2}"
@@ -17,7 +20,12 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ROLE_NAME="github-actions-recipe-agent"
 REPO="cdot65/aws-bedrock-agentcore-typescript-example"
 ECR_REPO="recipe-extraction-agent"
-RUNTIME_ID="${AGENTCORE_RUNTIME_ID:-recipe_extraction_agent-wkubdE7YBy}"
+
+if [[ -z "${AGENTCORE_RUNTIME_ID:-}" ]]; then
+  echo "ERROR: AGENTCORE_RUNTIME_ID env var required" >&2
+  exit 1
+fi
+RUNTIME_ID="${AGENTCORE_RUNTIME_ID}"
 
 echo "==> Creating GitHub Actions role: ${ROLE_NAME}"
 
