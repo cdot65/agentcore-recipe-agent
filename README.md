@@ -3,40 +3,13 @@
 TypeScript agent built on [Bedrock AgentCore](https://github.com/aws/bedrock-agentcore-sdk-typescript) + [Strands Agents SDK](https://github.com/strands-agents/sdk-typescript) that accepts a URL, fetches the webpage, and uses an LLM to extract a strongly-typed `Recipe` object.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for system design and request flow diagrams.
+See [docs/deployment-guide/](docs/deployment-guide/README.md) for the full 9-part deployment guide.
 
-## Prerequisites
-
-- Node.js 20+
-- AWS credentials configured with Bedrock access (`us.anthropic.claude-haiku-4-5-20251001-v1:0` in `us-west-2`)
-
-## Setup
+## Quick Start
 
 ```bash
 npm install
-```
-
-## Scripts
-
-| Script | Description |
-|---|---|
-| `npm run dev` | Start dev server with tsx (hot reload) |
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm start` | Run compiled output |
-| `npm test` | Run test suite (71 tests, Vitest) |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run test:coverage` | Run tests with coverage (100% enforced) |
-| `npm run typecheck` | Type-check without emitting (`tsc --noEmit`) |
-| `npm run lint` | Lint with Biome |
-| `npm run format` | Check formatting with Biome |
-| `npm run check` | Lint + format combined |
-| `npm run check:fix` | Auto-fix lint + format issues |
-| `npm run test:local` | Start server, hit /ping, POST a recipe URL, print result |
-
-## Usage
-
-Start the server:
-
-```bash
+cp .env.example .env   # fill in your values
 npm run dev
 ```
 
@@ -62,49 +35,80 @@ curl -X POST http://localhost:8080/invocations \
   "title": "Chicken Wontons in Spicy Chili Sauce",
   "ingredients": [
     { "quantity": 3, "unit": "tablespoons", "name": "sesame oil", "description": "divided" },
-    { "quantity": 8, "unit": "ounces", "name": "shiitake mushrooms", "description": "sliced" },
-    { "quantity": 12, "unit": "ounces", "name": "frozen chicken wontons", "description": "" }
+    { "quantity": 8, "unit": "ounces", "name": "shiitake mushrooms", "description": "sliced" }
   ],
-  "preparationSteps": [
-    "Slice shiitake mushrooms",
-    "Grate garlic clove"
-  ],
-  "cookingSteps": [
-    "Heat 1 tablespoon sesame oil in a large nonstick skillet over medium heat...",
-    "Add the frozen wontons, chicken broth, and teriyaki sauce. Simmer for 5 minutes..."
-  ],
+  "preparationSteps": ["Slice shiitake mushrooms", "Grate garlic clove"],
+  "cookingSteps": ["Heat 1 tablespoon sesame oil in a large nonstick skillet..."],
   "notes": {
     "servings": "4 servings",
     "cookTime": "10 minutes",
     "prepTime": "5 minutes",
-    "tips": ["Use mini chicken cilantro wontons from Trader Joe's or Costco for best results"]
+    "tips": ["Use mini chicken cilantro wontons from Trader Joe's"]
   }
 }
 ```
 
-## Prisma AIRS AI Runtime Security
+## Scripts
 
-The agent integrates [Prisma AIRS](https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-airs) for AI-layer threat detection. Every request passes through two security checkpoints:
+| Script | Description |
+|---|---|
+| `npm run dev` | Start dev server with tsx (hot reload) |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm start` | Run compiled output |
+| `npm test` | Run test suite (110 tests, Vitest) |
+| `npm run test:coverage` | Tests with coverage (100% enforced) |
+| `npm run typecheck` | Type-check without emitting (`tsc --noEmit`) |
+| `npm run check` | Lint + format (Biome) |
+| `npm run check:fix` | Auto-fix lint + format issues |
+
+## Project Structure
+
+```
+src/
+  app.ts                 Agent logic, extractJson, processHandler, AIRS scanning
+  main.ts                Bootstrap (Secrets Manager fetch) → import app → app.run()
+  lib/
+    cloudwatch-stream.ts Custom CloudWatch log stream
+  schemas/
+    recipe.ts            Zod schemas for Recipe and Ingredient
+  tools/
+    fetch-url.ts         Custom tool: fetch URL, strip HTML, extract JSON-LD
+tests/
+  unit/                  Schema, extractJson, fetch-url, cloudwatch-stream tests
+  integration/           processHandler tests (mocked Agent + BedrockAgentCoreApp)
+scripts/
+  deploy.sh              First deploy + update AgentCore runtime
+  setup-github-iam.sh    Create IAM role for GitHub Actions OIDC
+  setup-secrets.sh       Store AIRS API key in Secrets Manager
+docs/
+  deployment-guide/      9-part deployment guide (Parts 01–09)
+.githooks/
+  pre-commit             Runs typecheck → lint → test
+.github/
+  workflows/
+    ci.yml               CI on PR/push to main (typecheck, lint, test)
+    deploy.yml           Build → ECR push → AgentCore update on push to main
+```
+
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `AWS_REGION` | No | Defaults to `us-west-2` |
+| `PANW_AI_SEC_API_KEY` | No | Prisma AIRS API key (enables security scanning) |
+| `PRISMA_AIRS_PROFILE_NAME` | No | AIRS profile name (required with API key) |
+| `BEDROCK_AGENT_ID` | No | Enables CloudWatch log streaming when set |
+
+See `.env.example` for the full list. If AIRS is not configured, the agent operates normally (fail-open).
+
+## Security — Prisma AIRS
+
+The agent integrates [Prisma AIRS](https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin/prisma-airs) for AI-layer threat detection:
 
 1. **Pre-scan** — inbound prompt scanned for injection, malicious URLs, toxic content
 2. **Post-scan** — outbound recipe JSON scanned for DLP violations, malicious content
 
-Configure via `.env` (see `.env.example`):
-
-```bash
-PANW_AI_SEC_API_KEY=your-api-key
-PRISMA_AIRS_PROFILE_NAME=your-profile-name
-
-# Optional: agent metadata for AIRS agent discovery
-BEDROCK_AGENT_ID=
-BEDROCK_AGENT_VERSION=1
-AWS_ACCOUNT_ID=
-AWS_REGION=us-west-2
-```
-
-If AIRS is not configured, the agent operates normally (fail-open).
-
-When a scan blocks a request, the response includes:
+When a scan blocks a request:
 
 ```json
 {
@@ -115,35 +119,7 @@ When a scan blocks a request, the response includes:
 }
 ```
 
-## Project Structure
-
-```
-src/
-  app.ts                 Agent logic, extractJson, processHandler (exports)
-  main.ts                Entry point (imports app, calls app.run())
-  lib/
-    cloudwatch-stream.ts Custom CloudWatch log stream
-  schemas/
-    recipe.ts            Zod schemas for Recipe and Ingredient
-  tools/
-    fetch-url.ts         Custom tool: fetch URL, strip HTML, extract JSON-LD
-tests/
-  unit/
-    schemas/
-      recipe.test.ts     Schema validation tests
-    tools/
-      fetch-url.test.ts  URL fetch + HTML parsing tests
-    extract-json.test.ts JSON extraction tier tests
-  integration/
-    process-handler.test.ts  End-to-end handler tests
-.githooks/
-  pre-commit             Runs typecheck → lint → test before each commit
-.github/
-  workflows/
-    ci.yml               GitHub Actions CI (typecheck, lint, test on PR/push to main)
-```
-
-## Key Dependencies
+## Dependencies
 
 | Package | Purpose |
 |---|---|
@@ -152,13 +128,5 @@ tests/
 | `@cdot65/prisma-airs-sdk` | Prisma AIRS AI Runtime Security scanning |
 | `zod` v4 | Request/response schema validation |
 | `linkedom` | Lightweight HTML parsing (~200KB vs jsdom's 70MB) |
-
-## Dev Dependencies
-
-| Package | Purpose |
-|---|---|
-| `vitest` | Test framework (71 tests, 100% coverage) |
-| `@vitest/coverage-v8` | V8-based code coverage |
+| `vitest` | Test framework (110 tests, 100% coverage) |
 | `@biomejs/biome` | Linting + formatting |
-| `typescript` | Type checking |
-| `tsx` | TypeScript execution for dev server |

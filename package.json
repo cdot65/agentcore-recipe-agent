@@ -18,7 +18,7 @@
     "check": "biome check .",
     "check:fix": "biome check --write .",
     "prepare": "git config core.hooksPath .githooks",
-    "test:local": "pnpm run dev & sleep 3 && curl -s http://localhost:8080/ping && curl -s --max-time 120 -X POST http://localhost:8080/invocations -H 'Content-Type: application/json' -H 'x-amzn-bedrock-agentcore-runtime-session-id: test-session-1' -d '{\"url\": \"https://pinchofyum.com/chicken-wontons-in-spicy-chili-sauce\"}' | jq . ; kill %1 || true"
+    "test:local": "npm run dev & sleep 3 && curl -s http://localhost:8080/ping && curl -s --max-time 120 -X POST http://localhost:8080/invocations -H 'Content-Type: application/json' -H 'x-amzn-bedrock-agentcore-runtime-session-id: test-session-1' -d '{\"url\": \"https://pinchofyum.com/chicken-wontons-in-spicy-chili-sauce\"}' | jq . ; kill %1 || true"
   },
   "engines": {
     "node": ">=20"
