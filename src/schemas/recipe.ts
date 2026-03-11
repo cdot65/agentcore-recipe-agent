@@ -26,6 +26,7 @@ export const RecipeSchema = z.object({
       prepTime: z.string().optional().describe("Preparation time (e.g. '15 minutes')"),
       tips: z.array(z.string()).optional().describe("Additional tips or notes from the recipe"),
     })
+    .optional()
     .describe("Recipe metadata and tips"),
 });
 

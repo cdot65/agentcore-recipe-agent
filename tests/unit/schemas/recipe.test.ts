@@ -113,9 +113,9 @@ describe("RecipeSchema", () => {
     expect(() => RecipeSchema.parse(rest)).toThrow();
   });
 
-  it("rejects missing notes", () => {
+  it("accepts recipe without notes field", () => {
     const { notes, ...rest } = validRecipe;
-    expect(() => RecipeSchema.parse(rest)).toThrow();
+    expect(RecipeSchema.parse(rest)).toEqual(rest);
   });
 
   it("rejects invalid ingredient in array", () => {
