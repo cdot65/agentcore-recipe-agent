@@ -218,13 +218,14 @@ Set GitHub repo secrets:
 
 ## GitHub Secrets
 
-Three secrets are needed in your repository:
+Four secrets are needed in your repository:
 
 | Secret | Value | Purpose |
 |---|---|---|
 | `AWS_ROLE_ARN` | `arn:aws:iam::...:role/github-actions-recipe-agent` | OIDC role for CI/CD |
 | `AGENTCORE_RUNTIME_ID` | Runtime ID from first deploy | Target runtime to update |
 | `AGENTCORE_ROLE_ARN` | `arn:aws:iam::...:role/BedrockAgentCoreRecipeAgent` | Execution role passed to runtime |
+| `PRISMA_AIRS_PROFILE_NAME` | AIRS security profile name | Prisma AIRS profile for prompt/response scanning |
 
 Set them with the `gh` CLI:
 
@@ -232,6 +233,7 @@ Set them with the `gh` CLI:
 gh secret set AWS_ROLE_ARN -b "arn:aws:iam::123456789012:role/github-actions-recipe-agent"
 gh secret set AGENTCORE_RUNTIME_ID -b "your-runtime-id"
 gh secret set AGENTCORE_ROLE_ARN -b "arn:aws:iam::123456789012:role/BedrockAgentCoreRecipeAgent"
+gh secret set PRISMA_AIRS_PROFILE_NAME -b "your-airs-profile-name"
 ```
 
 ## Deploy Workflow
