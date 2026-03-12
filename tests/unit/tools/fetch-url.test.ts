@@ -55,6 +55,11 @@ describe("fetchUrlTool", () => {
       expect(result.text).toBe("");
     });
 
+    it("handles completely empty response body", async () => {
+      mockFetch.mockResolvedValueOnce(mockResponse(""));
+      await expect(fetchUrlTool.invoke({ url: "https://example.com" })).rejects.toThrow();
+    });
+
     it("truncates text longer than 30000 chars", async () => {
       const longText = "a".repeat(31000);
       mockFetch.mockResolvedValueOnce(mockResponse(htmlPage(`<p>${longText}</p>`)));
@@ -188,6 +193,16 @@ describe("fetchUrlTool", () => {
       const result = await fetchUrlTool.invoke({ url: "https://example.com" });
       expect(result.jsonLd).toBeNull();
     });
+
+    it("extracts Recipe from multiple mixed JSON-LD scripts with invalid entries", async () => {
+      const recipe = { "@type": "Recipe", name: "Pasta" };
+      const malformed = '<script type="application/ld+json">not valid json</script>';
+      const valid = jsonLdScript(recipe);
+      const head = malformed + valid;
+      mockFetch.mockResolvedValueOnce(mockResponse(htmlPage("<p>Content</p>", head)));
+      const result = await fetchUrlTool.invoke({ url: "https://example.com" });
+      expect(JSON.parse(result.jsonLd as string)).toEqual(recipe);
+    });
   });
 
   describe("HTTP errors", () => {
@@ -203,6 +218,13 @@ describe("fetchUrlTool", () => {
       const result = await fetchUrlTool.invoke({ url: "https://example.com" });
       expect(result.text).toBe("Error: HTTP 500 Internal Server Error");
       expect(result.jsonLd).toBeNull();
+    });
+
+    it("returns error when fetch throws a network error", async () => {
+      mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
+      await expect(fetchUrlTool.invoke({ url: "https://example.com" })).rejects.toThrow(
+        "fetch failed",
+      );
     });
   });
 
