@@ -29,7 +29,6 @@ async function bootstrap() {
       secretSource,
       apiKeySet: Boolean(apiKey),
       apiKeyLength: apiKey.length,
-      apiKeyPrefix: apiKey.slice(0, 8) || null,
       profileName: process.env.PRISMA_AIRS_PROFILE_NAME || null,
       region,
       bedrockAgentId: process.env.BEDROCK_AGENT_ID || null,
