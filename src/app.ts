@@ -1,16 +1,12 @@
-import {
-  AISecSDKException,
-  Content,
-  init,
-  Scanner,
-  type ScanResponse,
-} from "@cdot65/prisma-airs-sdk";
 import { Agent, type AgentResult, BedrockModel } from "@strands-agents/sdk";
 import { BedrockAgentCoreApp } from "bedrock-agentcore/runtime";
 import { z } from "zod";
+import { airsEnabled, postScan, preScan } from "./lib/airs-scanner.js";
 import { createCloudWatchStream, createTeeStream } from "./lib/cloudwatch-stream.js";
 import { type Recipe, RecipeSchema } from "./schemas/recipe.js";
 import { fetchUrlTool } from "./tools/fetch-url.js";
+
+export { airsEnabled } from "./lib/airs-scanner.js";
 
 export const SYSTEM_PROMPT = `You are a recipe extraction agent. When given a URL:
 
@@ -94,59 +90,6 @@ export function extractJson(text: string): unknown {
   throw new Error("Could not extract JSON from agent response");
 }
 
-// AIRS SDK initialization
-const airsApiKey = process.env.PANW_AI_SEC_API_KEY || "";
-const airsProfileName = process.env.PRISMA_AIRS_PROFILE_NAME || "";
-export const airsEnabled = Boolean(airsApiKey && airsProfileName);
-
-if (airsEnabled) {
-  init({ apiKey: airsApiKey });
-}
-
-const scanner = airsEnabled ? new Scanner() : null;
-
-function buildMetadata() {
-  const agentId = process.env.BEDROCK_AGENT_ID;
-  const region = process.env.AWS_REGION || "us-west-2";
-  const accountId = process.env.AWS_ACCOUNT_ID;
-
-  return {
-    app_name: "recipe-extraction-agent",
-    app_user: "anonymous",
-    ai_model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    agent_meta: agentId
-      ? {
-          agent_id: agentId,
-          agent_version: process.env.BEDROCK_AGENT_VERSION || "1",
-          agent_arn: accountId
-            ? `arn:aws:bedrock:${region}:${accountId}:agent/${agentId}`
-            : undefined,
-        }
-      : undefined,
-  };
-}
-
-function scanResultFields(scan: ScanResponse) {
-  return {
-    action: scan.action,
-    category: scan.category,
-    scanId: scan.scan_id,
-    reportId: scan.report_id,
-    profileId: scan.profile_id,
-    profileName: scan.profile_name,
-    trId: scan.tr_id,
-    promptDetected: scan.prompt_detected,
-    responseDetected: scan.response_detected,
-  };
-}
-
-function scanErrorFields(err: unknown) {
-  if (err instanceof AISecSDKException) {
-    return { err: String(err), errorType: err.errorType };
-  }
-  return { err: String(err) };
-}
-
 export const processHandler = async (
   request: { url?: string; prompt?: string },
   context: {
@@ -176,45 +119,15 @@ export const processHandler = async (
 
   const prompt = `Extract the recipe from this URL: ${url}`;
 
-  context.log.info({ airsEnabled, airsProfileName: airsProfileName || null }, "AIRS SDK status");
+  context.log.info(
+    { airsEnabled, airsProfileName: process.env.PRISMA_AIRS_PROFILE_NAME || null },
+    "AIRS SDK status",
+  );
 
   // Pre-scan: check inbound prompt for threats
-  if (scanner) {
-    const metadata = buildMetadata();
-    context.log.info(
-      { promptLength: prompt.length, profileName: airsProfileName, metadata },
-      "AIRS prompt scan starting",
-    );
-    let promptScan: ScanResponse | undefined;
-    try {
-      promptScan = await scanner.syncScan(
-        { profile_name: airsProfileName },
-        new Content({ prompt }),
-        { sessionId: context.sessionId, metadata },
-      );
-      context.log.info(
-        { ...scanResultFields(promptScan), durationMs: Date.now() - start },
-        "AIRS prompt scan complete",
-      );
-    } catch (err) {
-      context.log.error(
-        { ...scanErrorFields(err), durationMs: Date.now() - start },
-        "AIRS prompt scan failed, proceeding unscanned",
-      );
-    }
-
-    if (promptScan?.action === "block") {
-      context.log.warn(
-        { category: promptScan.category, scanId: promptScan.scan_id },
-        "Request blocked by AIRS",
-      );
-      return {
-        error: "blocked",
-        message: "Request blocked by Prisma AIRS security.",
-        category: promptScan.category,
-        scan_id: promptScan.scan_id,
-      };
-    }
+  const preScanResult = await preScan(prompt, context.sessionId, context.log);
+  if (preScanResult.blocked && preScanResult.blockResponse) {
+    return preScanResult.blockResponse;
   }
 
   const agentStart = Date.now();
@@ -258,49 +171,14 @@ export const processHandler = async (
   );
 
   // Post-scan: check outbound response for threats
-  if (scanner) {
-    const responseBody = JSON.stringify(recipe);
-    const metadata = buildMetadata();
-    context.log.info(
-      {
-        promptLength: prompt.length,
-        responseLength: responseBody.length,
-        profileName: airsProfileName,
-        metadata,
-      },
-      "AIRS response scan starting",
-    );
-    let responseScan: ScanResponse | undefined;
-    const responseScanStart = Date.now();
-    try {
-      responseScan = await scanner.syncScan(
-        { profile_name: airsProfileName },
-        new Content({ prompt, response: responseBody }),
-        { sessionId: context.sessionId, metadata },
-      );
-      context.log.info(
-        { ...scanResultFields(responseScan), durationMs: Date.now() - responseScanStart },
-        "AIRS response scan complete",
-      );
-    } catch (err) {
-      context.log.error(
-        { ...scanErrorFields(err), durationMs: Date.now() - responseScanStart },
-        "AIRS response scan failed, proceeding unscanned",
-      );
-    }
-
-    if (responseScan?.action === "block") {
-      context.log.warn(
-        { category: responseScan.category, scanId: responseScan.scan_id },
-        "Response blocked by AIRS",
-      );
-      return {
-        error: "blocked",
-        message: "Response blocked by Prisma AIRS security.",
-        category: responseScan.category,
-        scan_id: responseScan.scan_id,
-      };
-    }
+  const postScanResult = await postScan(
+    prompt,
+    JSON.stringify(recipe),
+    context.sessionId,
+    context.log,
+  );
+  if (postScanResult.blocked && postScanResult.blockResponse) {
+    return postScanResult.blockResponse;
   }
 
   const totalDurationMs = Date.now() - start;
