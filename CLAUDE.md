@@ -10,16 +10,17 @@ TypeScript agent built on the [bedrock-agentcore SDK](https://github.com/aws/bed
 
 ```
 src/
-  app.ts          Agent logic, extractJson, extractUrl, processHandler, AIRS scanning
+  app.ts          Agent logic, extractJson, extractUrl, processHandler
   main.ts         Bootstrap (Secrets Manager fetch) → dynamic import app → app.run()
   lib/
     cloudwatch-stream.ts  CloudWatch Logs streaming (createCloudWatchStream, createTeeStream)
+    airs-scanner.ts     AIRS SDK integration (preScan, postScan, airsEnabled)
   schemas/
     recipe.ts     Zod schemas (IngredientSchema, RecipeSchema) + types
   tools/
     fetch-url.ts  fetch_url tool: HTTP fetch, HTML parsing, JSON-LD extraction
 tests/
-  unit/           Schema, extractJson, fetch-url, cloudwatch-stream tests
+  unit/           Schema, extractJson, fetch-url, cloudwatch-stream, airs-scanner tests
   integration/    processHandler tests (mocked Agent + BedrockAgentCoreApp)
 scripts/
   deploy.sh             First deploy + update AgentCore runtime
