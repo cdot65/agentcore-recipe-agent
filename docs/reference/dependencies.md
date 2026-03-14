@@ -16,7 +16,7 @@
 
 | Package | Version | Purpose |
 |---|---|---|
-| `vitest` | ^4.0.18 | Test framework (110 tests, 100% coverage enforced) |
+| `vitest` | ^4.0.18 | Test framework (133 tests, 100% coverage enforced) |
 | `@vitest/coverage-v8` | ^4.0.18 | V8-based code coverage provider |
 | `@biomejs/biome` | ^2.4.4 | Linting + formatting (single tool, zero plugins) |
 | `typescript` | ^5.7.0 | Type checking (strict mode) |

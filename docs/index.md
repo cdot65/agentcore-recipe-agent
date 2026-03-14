@@ -51,7 +51,7 @@ Give it a URL, get back a strongly-typed `Recipe` JSON object. Built on [Bedrock
 
     ***
 
-    110 tests across 5 suites with enforced coverage thresholds. Pre-commit hooks and GitHub Actions CI gate every change.
+    133 tests across 6 suites with enforced coverage thresholds. Pre-commit hooks and GitHub Actions CI gate every change.
 
 - :material-rocket-launch:{ .lg .middle } **Automated CI/CD**
 

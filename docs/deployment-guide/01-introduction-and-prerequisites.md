@@ -236,7 +236,7 @@ The response (after 5-9 seconds) will be a structured recipe JSON object:
 ### 6. Run the test suite
 
 ```bash
-npm test              # 110 tests
+npm test              # 133 tests
 npm run test:coverage # with coverage report
 npm run typecheck     # TypeScript type checking
 npm run check         # Biome lint + format
