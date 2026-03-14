@@ -54,7 +54,7 @@ The agent fetches the page, passes it to Claude Haiku 4.5, and returns a structu
 ## 5. Run Tests
 
 ```bash
-npm test                   # 110 tests
+npm test                   # 133 tests
 npm run test:coverage      # with 100% coverage enforcement
 npm run typecheck          # tsc --noEmit
 npm run check              # biome lint + format

@@ -29,7 +29,7 @@ curl -X POST http://localhost:8080/invocations \
 - **URL to structured data** — fetches any recipe page, extracts JSON-LD + text, returns validated Recipe JSON
 - **AI security scanning** — optional Prisma AIRS pre/post scanning for prompt injection and data leaks
 - **CloudWatch observability** — structured JSON logs streamed from inside the container
-- **100% test coverage** — 110 tests, enforced thresholds, pre-commit hooks
+- **100% test coverage** — 133 tests, enforced thresholds, pre-commit hooks
 - **Automated CI/CD** — GitHub Actions with OIDC auth, ECR push, AgentCore runtime updates
 
 ## Documentation
